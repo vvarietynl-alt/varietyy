@@ -24,6 +24,7 @@ export class Hud {
   private rubyEl = h('span');
   private pearlEl = h('span');
   private pearlPill: HTMLElement;
+  private musicBtn!: HTMLButtonElement;
   private voyageBtn: HTMLElement | null = null;
   private levelEl = h('span', { class: 'pill' });
   private zoneLabel = h('b');
@@ -59,6 +60,10 @@ export class Hud {
       h('div', { class: 'hud-right' },
         (this.pearlPill = pressButton({ class: 'pill', style: 'display:none' }, () => this.openPanel('lighthouse'), '🐚', this.pearlEl)),
         pressButton({ class: 'pill' }, () => this.openPanel('shop'), ruby(), this.rubyEl),
+        (this.musicBtn = pressButton({ class: 'icon-btn', 'aria-label': 'Music on or off' }, () => {
+          game.state.settings.music = !game.state.settings.music;
+          host.sfx('click');
+        }, '🎵')),
         pressButton({ class: 'icon-btn', 'aria-label': 'Settings' }, () => this.openPanel('settings'), '⚙️'),
       ),
     );
@@ -188,6 +193,8 @@ export class Hud {
     const rate = this.game.incomePerSecond;
     setText(this.rateEl, `+${formatNumber(rate)} /s`);
     setText(this.rubyEl, String(s.rubies));
+    setText(this.musicBtn, s.settings.music ? '🎵' : '🔇');
+    this.musicBtn.classList.toggle('off', !s.settings.music);
     setText(this.levelEl, `Lv ${s.level} · ${themeFor(s.level).name}`);
 
     const z = s.activeZone;

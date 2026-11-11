@@ -117,8 +117,10 @@ van je inkomen.
 - **Effecten** (`src/render/effects.ts`, één draw call voor alle deeltjes): zachte spetters, kringen in het water, schuimspoor,
   fonkelingen, uitbarstingen bij zeldzame vangsten/bosses/schatten, munten die naar de goudteller vliegen, meeuwen
 - **Licht**: warme zon met zachte schaduwen op het eiland, ACES-tonemapping, kleurverloop in de lucht
-- **Geluid** (`src/audio.ts`, alles gesynthetiseerd): Caribisch deuntje (steeldrums, calypso-bas, off-beat akkoorden, shaker,
-  vier wisselende melodieën) en speelse effecten; muziek en effecten apart aan/uit in Instellingen, pauzeert op de achtergrond
+- **Muziek**: "Island Adventure" (`public/music/island-adventure.mp3`, gemaakt met Suno — voor commercieel gebruik moet het
+  met een betaald Suno-abonnement gemaakt zijn), loopt naadloos rond; 🎵/🔇-knop rechtsboven en in Instellingen; pauzeert op
+  de achtergrond. Lukt laden niet, dan speelt een gesynthetiseerd Caribisch deuntje als reserve
+- **Geluidseffecten** (`src/audio.ts`, gesynthetiseerd): plip, spetter, munt, steeldrum-akkoorden, kassa, hoorn, fanfare
 
 ## Playtest-analytics
 

@@ -526,3 +526,5 @@ button { font-family: inherit; color: inherit; border: 0; cursor: pointer; }
 .fly-coin { position: absolute; width: 18px; height: 18px; transform: translate(-50%, -50%); pointer-events: none; z-index: 5; }
 .amount.bump { animation: bump 0.25s ease-out; }
 @keyframes bump { 50% { transform: scale(1.12); } }
+
+.icon-btn.off { opacity: 0.6; }

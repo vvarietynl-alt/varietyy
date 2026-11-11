@@ -1,8 +1,11 @@
 /**
- * Sound for Whale Hunter, fully synthesized with the Web Audio API (no audio
- * files): playful sound effects and a looping Caribbean tune with steel drum
- * melody, calypso bass, off-beat strums and a shaker.
+ * Sound for Whale Hunter: background music "Island Adventure" (an mp3 that
+ * loops seamlessly) and synthesized sound effects. If the music file cannot
+ * be loaded, a synthesized Caribbean tune (steel drums, calypso bass, shaker)
+ * plays instead.
  */
+const MUSIC_URL = `${import.meta.env.BASE_URL}music/island-adventure.mp3`;
+const MUSIC_VOLUME = 0.42;
 export type Sfx =
   | 'tap' | 'catch' | 'rare' | 'goldfish' | 'buy' | 'click' | 'error'
   | 'boss' | 'win' | 'lose' | 'mini' | 'coin' | 'splash' | 'frenzy';
@@ -43,6 +46,8 @@ export class Audio {
   private melody = 0;
   private progression = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private trackSource: AudioBufferSourceNode | null = null;
+  private trackLoad: Promise<AudioBuffer | null> | null = null;
 
   /** Must be called from a user gesture before sounds can play. */
   unlock(): void {
@@ -86,22 +91,54 @@ export class Audio {
     else void this.ctx.resume();
   }
 
+  private loadTrack(): Promise<AudioBuffer | null> {
+    if (!this.trackLoad) {
+      const ctx = this.ctx!;
+      this.trackLoad = fetch(MUSIC_URL)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+        .then((data) => ctx.decodeAudioData(data))
+        .catch(() => null);
+    }
+    return this.trackLoad;
+  }
+
   private startMusic(): void {
     if (!this.ctx || this.musicOn) return;
     this.musicOn = true;
-    this.nextStep = this.ctx.currentTime + 0.1;
-    this.musicBus.gain.cancelScheduledValues(this.ctx.currentTime);
-    this.musicBus.gain.setTargetAtTime(0.34, this.ctx.currentTime, 0.8);
-    // look-ahead scheduler: plan notes slightly ahead so timing stays tight
-    this.timer = setInterval(() => this.schedule(), 25);
+    const ctx = this.ctx;
+    void this.loadTrack().then((buf) => {
+      if (!this.musicOn || this.trackSource || this.timer) return;
+      this.musicBus.gain.cancelScheduledValues(ctx.currentTime);
+      this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, ctx.currentTime);
+      if (buf) {
+        // the song, looping seamlessly
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        src.connect(this.musicBus);
+        src.start();
+        this.trackSource = src;
+        this.musicBus.gain.setTargetAtTime(MUSIC_VOLUME, ctx.currentTime, 0.6);
+      } else {
+        // fallback: synthesized tune with a look-ahead scheduler
+        this.nextStep = ctx.currentTime + 0.1;
+        this.musicBus.gain.setTargetAtTime(0.34, ctx.currentTime, 0.8);
+        this.timer = setInterval(() => this.schedule(), 25);
+      }
+    });
   }
 
   private stopMusic(): void {
     if (!this.ctx || !this.musicOn) return;
     this.musicOn = false;
-    this.musicBus.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3);
+    const ctx = this.ctx;
+    this.musicBus.gain.cancelScheduledValues(ctx.currentTime);
+    this.musicBus.gain.setTargetAtTime(0, ctx.currentTime, 0.25);
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    const src = this.trackSource;
+    this.trackSource = null;
+    if (src) setTimeout(() => src.stop(), 1200);
   }
 
   private schedule(): void {
