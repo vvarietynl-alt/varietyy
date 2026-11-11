@@ -1,4 +1,4 @@
-import { CAPTAINS_PASS_DAILY_RUBIES, DAILY_REWARDS, type DailyReward, MISSION_GROWTH, MISSION_SLOTS, ZONES_PER_LEVEL } from '../data/balance';
+import { CAPTAINS_PASS_DAILY_RUBIES, DAILY_REWARDS, type DailyReward, MISSION_GROWTH, MISSION_RUBY_MISSIONS_PER_DAY, MISSION_SKIP_COOLDOWN_MIN, MISSION_SLOTS, ZONES_PER_LEVEL } from '../data/balance';
 import { formatNumber } from './format';
 import type { Game } from './game';
 import type { Mission, StatKey } from './state';
@@ -76,9 +76,33 @@ function createMission(g: Game, rnd: () => number): Mission {
   };
 }
 
+/** The very first missions teach the basics and pay out fast. */
+function firstMissions(g: Game): Mission[] {
+  const s = g.state.stats;
+  const make = (stat: StatKey, target: number, rubies: number): Mission => ({ id: nextId++, stat, target, base: s[stat], rewardRubies: rubies, rewardMinutes: 3 });
+  return [make('fishCaught', 5, 2), make('upgradesBought', 1, 2), make('fishermenHired', 2, 2)];
+}
+
 /** Keep MISSION_SLOTS missions available. */
 export function ensureMissions(g: Game, rnd: () => number = Math.random): void {
+  if (g.state.missions.length === 0 && g.state.stats.missionsDone === 0) g.state.missions = firstMissions(g);
   while (g.state.missions.length < MISSION_SLOTS) g.state.missions.push(createMission(g, rnd));
+}
+
+/** Missions that will still pay rubies today. */
+export function missionRubiesLeftToday(g: Game): number {
+  const m = g.state.missionRubies;
+  return m.day === dayKey(g.now()) ? Math.max(0, MISSION_RUBY_MISSIONS_PER_DAY - m.count) : MISSION_RUBY_MISSIONS_PER_DAY;
+}
+
+/** Rubies this mission pays if claimed now (0 after the daily ruby missions). */
+export function missionRubyReward(g: Game, m: Mission): number {
+  return missionRubiesLeftToday(g) > 0 ? m.rewardRubies : 0;
+}
+
+/** Seconds until the next free swap (0 = available). */
+export function skipCooldown(g: Game): number {
+  return Math.max(0, (g.state.missionSkipAt + MISSION_SKIP_COOLDOWN_MIN * 60e3 - g.now()) / 1000);
 }
 
 export function claimMission(g: Game, id: number, rnd: () => number = Math.random): { gold: number; rubies: number } | null {
@@ -86,18 +110,27 @@ export function claimMission(g: Game, id: number, rnd: () => number = Math.rando
   const m = s.missions.find((o) => o.id === id);
   if (!m || !missionDone(g, m)) return null;
   const gold = g.rewardGold(m.rewardMinutes);
+  const rubies = missionRubyReward(g, m);
   g.addGold(gold);
-  s.rubies += m.rewardRubies;
+  s.rubies += rubies;
+  if (rubies > 0) {
+    const today = dayKey(g.now());
+    if (s.missionRubies.day !== today) s.missionRubies = { day: today, count: 0 };
+    s.missionRubies.count++;
+  }
   s.stats.missionsDone++;
   s.missions = s.missions.filter((o) => o !== m);
   ensureMissions(g, rnd);
-  return { gold, rubies: m.rewardRubies };
+  return { gold, rubies };
 }
 
 /** Swap a mission for a new one (free, once it has been visible a while it is just a choice). */
-export function skipMission(g: Game, id: number, rnd: () => number = Math.random): void {
+export function skipMission(g: Game, id: number, rnd: () => number = Math.random): boolean {
+  if (skipCooldown(g) > 0) return false;
+  g.state.missionSkipAt = g.now();
   g.state.missions = g.state.missions.filter((o) => o.id !== id);
   ensureMissions(g, rnd);
+  return true;
 }
 
 // --- Daily reward ------------------------------------------------------------------------

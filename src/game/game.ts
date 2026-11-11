@@ -1,4 +1,12 @@
 import {
+  CHEST_RUBIES,
+  CHEST_RUBY_CHANCE,
+  EXHIBITS,
+  type ExhibitId,
+  FTUE_FREE_FISHERMAN_AT_CATCH,
+  RUBY_ADS_PER_DAY,
+  RUBY_PACKS,
+  STARTER_PACK,
   ATLAS_SET_BONUS,
   ATLAS_SET_RUBIES,
   type AtlasGroup,
@@ -57,6 +65,9 @@ export type GameEvent =
   | { type: 'boost'; boost: BoostId; minutes: number }
   | { type: 'voyage'; pearls: number }
   | { type: 'atlas-set'; key: string; rubies: number }
+  | { type: 'gift-fisherman' }
+  | { type: 'starter-offer' }
+  | { type: 'purchase-granted'; product: string; rubies: number }
   | { type: 'goldfish'; species: FishSpecies; gold: number }
   | { type: 'boss-defeated'; species: FishSpecies; gold: number; levelComplete: boolean }
   | { type: 'zone-unlocked'; zone: number }
@@ -123,7 +134,7 @@ export class Game {
 
   /** Gold multiplier for fish: Double Haul boost and the permanent pearl bonus. */
   get incomeMult(): number {
-    return (this.isBoostActive('doubleHaul') ? 2 : 1) * this.pearlBonus * (this.state.premium.goldenHull ? 2 : 1) * this.atlasBonus;
+    return (this.isBoostActive('doubleHaul') ? 2 : 1) * this.pearlBonus * (this.state.premium.goldenHull ? 2 : 1) * this.atlasBonus * (1 + this.state.exhibits.hallOfFame * 0.05);
   }
 
   /** Permanent bonus from completed Atlas sets. */
@@ -193,6 +204,70 @@ export class Game {
   get adsLeftToday(): number {
     const a = this.state.ads;
     return a.day === dayKey(this.now()) ? Math.max(0, AD_DAILY_LIMIT - a.count) : AD_DAILY_LIMIT;
+  }
+
+  get rubyAdsLeftToday(): number {
+    const a = this.state.rubyAds;
+    return a.day === dayKey(this.now()) ? Math.max(0, RUBY_ADS_PER_DAY - a.count) : RUBY_ADS_PER_DAY;
+  }
+
+  recordRubyAd(): void {
+    const today = dayKey(this.now());
+    const a = this.state.rubyAds;
+    if (a.day !== today) {
+      a.day = today;
+      a.count = 0;
+    }
+    a.count++;
+  }
+
+  // --- Offers and purchases (product rewards; the payment itself is done by the Billing service)
+
+  get starterOfferActive(): boolean {
+    const o = this.state.offers;
+    return !o.starterBought && o.starterUntil > this.now();
+  }
+
+  /** Apply the reward of a completed purchase. The very first purchase doubles ruby packs. */
+  grantPurchase(productId: string): number {
+    const s = this.state;
+    let rubies = 0;
+    if (productId === STARTER_PACK.id) {
+      if (s.offers.starterBought) return 0;
+      s.offers.starterBought = true;
+      rubies = STARTER_PACK.rubies;
+      if (!s.cosmetics.skins.includes(STARTER_PACK.skin)) s.cosmetics.skins.push(STARTER_PACK.skin);
+      s.cosmetics.boatSkin = STARTER_PACK.skin;
+      this.activateBoost('doubleHaul', STARTER_PACK.boostHours * 60);
+    } else if (productId === 'captains_pass') {
+      s.premium.captainsPass = true;
+    } else {
+      const pack = RUBY_PACKS.find((p) => p.id === productId);
+      if (!pack) return 0;
+      rubies = pack.rubies * (s.offers.purchased ? 1 : 2);
+    }
+    s.rubies += rubies;
+    s.offers.purchased = true;
+    this.emit({ type: 'purchase-granted', product: productId, rubies });
+    return rubies;
+  }
+
+  // --- Aquarium Museum ------------------------------------------------------------------------
+
+  exhibitCost(id: ExhibitId): number {
+    const def = EXHIBITS[id];
+    const lvl = id === 'hallOfFame' || id === 'crewTraining' ? this.state.exhibits[id] : 0;
+    return Math.ceil(def.cost * Math.pow(def.growth, lvl));
+  }
+
+  buyExhibit(id: ExhibitId): boolean {
+    const cost = this.exhibitCost(id);
+    if (this.state.trophies < cost) return false;
+    this.state.trophies -= cost;
+    if (id === 'hallOfFame' || id === 'crewTraining') this.state.exhibits[id]++;
+    else this.activateBoost(id === 'feedingShow' ? 'doubleHaul' : 'goldenTide', EXHIBITS[id].minutes ?? 0);
+    this.emit({ type: 'purchase' });
+    return true;
   }
 
   recordAdWatched(): void {
@@ -359,8 +434,8 @@ export class Game {
   openChest(): ChestReward {
     const roll = this.rnd();
     let reward: ChestReward;
-    if (roll < 0.12) reward = { kind: 'rubies', amount: 2 + Math.floor(this.rnd() * 4) };
-    else if (roll < 0.22) reward = { kind: 'boost', boost: 'doubleHaul', minutes: 5 };
+    if (roll < CHEST_RUBY_CHANCE) reward = { kind: 'rubies', amount: CHEST_RUBIES[0] + Math.floor(this.rnd() * (CHEST_RUBIES[1] - CHEST_RUBIES[0] + 1)) };
+    else if (roll < CHEST_RUBY_CHANCE + 0.1) reward = { kind: 'boost', boost: 'doubleHaul', minutes: 5 };
     else reward = { kind: 'gold', amount: this.rewardGold(1 + this.rnd() * 2) };
     this.grant(reward);
     this.state.stats.chestsOpened++;
@@ -387,7 +462,7 @@ export class Game {
 
   get incomePerSecond(): number {
     const s = this.state;
-    return fleetIncomePerSecond(s.level, s.unlockedZone, s.fishermen, this.incomeMult * Math.pow(1.25, s.pearlUpgrades.biggerNets));
+    return fleetIncomePerSecond(s.level, s.unlockedZone, s.fishermen, this.incomeMult * Math.pow(1.25, s.pearlUpgrades.biggerNets) * (1 + s.exhibits.crewTraining * 0.05));
   }
 
   addGold(amount: number): void {
@@ -423,6 +498,13 @@ export class Game {
     if (trophy) s.trophies++;
     this.addGold(gold);
     this.emit({ type: 'catch', species, gold, firstTime, trophy, lucky });
+    // first minutes: the first fisherman joins for free, so the company shows up early
+    if (s.stats.fishCaught === FTUE_FREE_FISHERMAN_AT_CATCH && !s.fishermen.some((n) => n > 0) && !(s.tutorialStep & 2)) {
+      s.tutorialStep |= 2;
+      s.fishermen[0] = 1;
+      s.stats.fishermenHired++;
+      this.emit({ type: 'gift-fisherman' });
+    }
   }
 
   collectGoldfish(): number {
@@ -446,6 +528,11 @@ export class Game {
     s.atlas[species.id] = (s.atlas[species.id] ?? 0) + 1;
     const gold = bossGold(s.level, bossIndex);
     this.addGold(gold);
+    // after the very first boss: a one-time starter offer for 48 hours
+    if (s.offers.starterUntil === 0 && !s.offers.starterBought) {
+      s.offers.starterUntil = this.now() + STARTER_PACK.hours * 3600e3;
+      setTimeout(() => this.emit({ type: 'starter-offer' }), 2500);
+    }
     this.emit({ type: 'boss-defeated', species, gold, levelComplete: s.bossesDefeated[0] && s.bossesDefeated[1] });
   }
 

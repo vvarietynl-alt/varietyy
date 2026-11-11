@@ -4,14 +4,15 @@ import '@fontsource/baloo-2/800.css';
 import { Audio, vibrate } from './audio';
 import { FishingWorld } from './game/fishing';
 import { BOAT_CLASS_NAMES, boatClassFor, Fleet } from './game/fleet';
-import { BOOSTS, FISHERMAN_NAMES, PEARL_INCOME_BONUS } from './data/balance';
+import { BOOSTS, DAILY_POPUP_MIN_CATCHES, FISHERMAN_NAMES, PEARL_INCOME_BONUS } from './data/balance';
 import { canClaimDaily, ensureMissions } from './game/missions';
 import { formatNumber } from './game/format';
 import { Game } from './game/game';
 import { loadState, newGame, SAVE_KEY, serializeState } from './game/state';
 import { WorldRenderer } from './render/worldRenderer';
 import { Ads } from './services/ads';
-import { TestAdProvider } from './ui/testAd';
+import { Billing } from './services/billing';
+import { TestAdProvider, TestBillingProvider } from './ui/testAd';
 import { coin, h } from './ui/dom';
 import { Hud } from './ui/hud';
 import { Overlay } from './ui/overlay';
@@ -35,6 +36,7 @@ const fleet = new Fleet(game, () => world.boat);
 const renderer = new WorldRenderer(canvas, world, game, fleet);
 const audio = new Audio();
 const ads = new Ads(game, new TestAdProvider(uiRoot));
+const billing = new Billing(game, new TestBillingProvider(uiRoot));
 
 function save(): void {
   game.state.lastSeen = Date.now();
@@ -56,6 +58,8 @@ const panels = new PanelManager(uiRoot, {
   sfx,
   reward: (text) => overlay.rewardPop(text),
   ads,
+  billing,
+  toast: (text) => hud.toast([text]),
   onClose: () => {},
   confirmVoyage: () => {
     const pearls = game.pearlsForVoyage;
@@ -113,7 +117,7 @@ game.on((e) => {
       sfx(special ? 'rare' : 'catch');
       vibrate(special ? 40 : 15, game.state.settings.haptics);
       if (e.firstTime && special) overlay.catchCard(e.species.name, e.species.rarity, renderer.renderPreview(e.species), formatNumber(e.gold));
-      else if (e.firstTime) hud.toast([`📖 New in the Atlas: ${e.species.name}`]);
+
       if (e.trophy) hud.toast(['🏆 Trophy found!'], true);
       break;
     }
@@ -142,6 +146,17 @@ game.on((e) => {
       break;
     case 'zone-unlocked':
       hud.toast([`🗺️ Zone ${e.zone} unlocked!`], true);
+      overlay.confetti();
+      save();
+      break;
+    case 'gift-fisherman':
+      overlay.rewardPop('🎁 Your first fisherman joins!');
+      hud.toast(['⛵ He fishes for you — even when you are offline. Hire more at the School!'], true);
+      break;
+    case 'starter-offer':
+      hud.showStarterOffer(() => panels.openShop('rubies'));
+      break;
+    case 'purchase-granted':
       overlay.confetti();
       save();
       break;
@@ -222,6 +237,8 @@ fleet.on((e) => {
   if (e.type === 'fleet-unload') {
     const p = renderer.toScreen(e.boat.x, 2, e.boat.z);
     if (p.visible && e.gold > 0) overlay.floatGold(e.boat.x, e.boat.z, e.gold);
+  } else if (e.type === 'fleet-launch' && e.boat.index === 0 && e.boat.tier === 0 && game.state.stats.fishermenHired <= 1) {
+    // the free first fisherman already has its own message
   } else if (e.type === 'fleet-launch' && e.boat.index === 0) {
     const cls = BOAT_CLASS_NAMES[boatClassFor(e.boat.tier)];
     hud.toast([e.firstOfClass ? `⛵ New boat type: ${cls}! ${FISHERMAN_NAMES[e.boat.tier]} sets sail` : `⛵ ${FISHERMAN_NAMES[e.boat.tier]} joins your fleet`], e.firstOfClass);
@@ -270,6 +287,21 @@ function checkOffline(): void {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) save();
   else checkOffline();
+
+// Start screen for brand-new players (also unlocks audio on the first tap).
+if (!(game.state.tutorialStep & 4) && game.state.stats.fishCaught === 0) {
+  const start = h('div', { class: 'start-screen', onpointerdown: (e: Event) => {
+    e.stopPropagation();
+    audio.unlock();
+    game.state.tutorialStep |= 4;
+    start.classList.add('out');
+    setTimeout(() => start.remove(), 500);
+  } },
+    h('div', { class: 'start-logo' }, h('span', null, '🐋'), h('h1', null, 'Whale Hunter'), h('p', null, 'Build the biggest fishing company of the seven seas')),
+    h('div', { class: 'start-tap' }, 'Tap to start fishing'),
+  );
+  uiRoot.append(start);
+}
 });
 window.addEventListener('pagehide', save);
 setInterval(save, 5000);
@@ -280,10 +312,25 @@ setInterval(() => {
 ensureMissions(game);
 checkOffline();
 
+// Start screen for brand-new players (also unlocks audio on the first tap).
+if (!(game.state.tutorialStep & 4) && game.state.stats.fishCaught === 0) {
+  const start = h('div', { class: 'start-screen', onpointerdown: (e: Event) => {
+    e.stopPropagation();
+    audio.unlock();
+    game.state.tutorialStep |= 4;
+    start.classList.add('out');
+    setTimeout(() => start.remove(), 500);
+  } },
+    h('div', { class: 'start-logo' }, h('span', null, '🐋'), h('h1', null, 'Whale Hunter'), h('p', null, 'Build the biggest fishing company of the seven seas')),
+    h('div', { class: 'start-tap' }, 'Tap to start fishing'),
+  );
+  uiRoot.append(start);
+}
+
 // Offer the daily reward once per session, after the player has started fishing.
 let dailyOffered = false;
 setInterval(() => {
-  if (dailyOffered || !canClaimDaily(game) || game.state.stats.fishCaught < 3) return;
+  if (dailyOffered || !canClaimDaily(game) || game.state.stats.fishCaught < DAILY_POPUP_MIN_CATCHES) return;
   if (panels.current || hud.modalOpen || world.fight) return;
   dailyOffered = true;
   panels.open('daily');
@@ -291,15 +338,19 @@ setInterval(() => {
 
 // --- Main loop ----------------------------------------------------------------------------
 
+/** Developer option for playtests: ?timescale=8 runs the game 8× faster. */
+const timeScale = Math.max(1, Math.min(20, Number(new URLSearchParams(location.search).get('timescale')) || 1));
 let last = performance.now();
 function frame(now: number): void {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  game.tick(dt);
-  fleet.update(dt);
-  // a boss fight pauses while a menu is open
-  const menuOpen = !!panels.current || renderer.mode === 'island' || hud.modalOpen;
-  if (!(world.fight && menuOpen)) world.update(dt);
+  for (let i = 0; i < timeScale; i++) {
+    game.tick(dt);
+    fleet.update(dt);
+    // a boss fight pauses while a menu is open
+    const menuOpen = !!panels.current || renderer.mode === 'island' || hud.modalOpen;
+    if (!(world.fight && menuOpen)) world.update(dt);
+  }
   renderer.update(dt);
   overlay.update(renderer.mode === 'island');
   hud.update();

@@ -503,7 +503,7 @@ export const SEA_EVENTS: Record<SeaEventKind, SeaEventDef> = {
   goldenHour: { kind: 'goldenHour', name: 'Golden Hour', description: 'koi everywhere', seconds: 20, icon: '🌅' },
 };
 /** First event after this many seconds of play, then every 4–7 minutes. */
-export const SEA_EVENT_FIRST = 150;
+export const SEA_EVENT_FIRST = 90;
 export const SEA_EVENT_INTERVAL = [240, 420] as const;
 export const SCHOOL_FISH = 13;
 export const SCHOOL_GOLD_MULT = 2;
@@ -513,3 +513,54 @@ export const GOLDEN_HOUR_GOLDFISH_PER_MINUTE = 9;
 export type AtlasGroup = 'common' | 'rare' | 'endangered' | 'legendary' | 'special';
 export const ATLAS_SET_RUBIES: Record<AtlasGroup, number> = { common: 5, rare: 10, endangered: 15, legendary: 25, special: 20 };
 export const ATLAS_SET_BONUS = 0.02;
+
+// ---------------------------------------------------------------------------
+// Ruby economy (review round)
+// ---------------------------------------------------------------------------
+// Before this round an active player earned 55–100 rubies per hour (free
+// mission rerolls to "tap 300", rubies in 12% of chests, 12 ruby ads a day),
+// which made every ruby pack pointless. Target now: ~30 rubies a day for a
+// daily player, so the big items take weeks and a purchase matters.
+/** Only this many missions per day pay rubies (all missions keep paying gold). */
+export const MISSION_RUBY_MISSIONS_PER_DAY = 5;
+/** Minutes between free mission swaps. */
+export const MISSION_SKIP_COOLDOWN_MIN = 10;
+/** Chance that a treasure chest holds rubies, and how many. */
+export const CHEST_RUBY_CHANCE = 0.05;
+export const CHEST_RUBIES = [1, 2] as const;
+/** "Free rubies" ads per day (the other ad rewards have their own uses). */
+export const RUBY_ADS_PER_DAY = 3;
+
+/** Ruby packs (Google Play). The first purchase gives double rubies. */
+export const RUBY_PACKS = [
+  { id: 'rubies_80', rubies: 80, price: '€1.99', tag: '' },
+  { id: 'rubies_220', rubies: 220, price: '€4.99', tag: 'Popular' },
+  { id: 'rubies_500', rubies: 500, price: '€9.99', tag: '' },
+  { id: 'rubies_1200', rubies: 1200, price: '€19.99', tag: 'Best value' },
+  { id: 'rubies_2800', rubies: 2800, price: '€39.99', tag: '' },
+];
+/** One-time starter offer, shown after the first boss for 48 hours. */
+export const STARTER_PACK = { id: 'starter_pack', price: '€2.99', rubies: 250, skin: 'ocean' as const, boostHours: 2, hours: 48 };
+
+// ---------------------------------------------------------------------------
+// First minutes (FTUE)
+// ---------------------------------------------------------------------------
+/** The 3rd catch is always a rare fish (an early "wow"). */
+export const FTUE_RARE_AT_CATCH = 3;
+/** After this many catches the first fisherman joins for free (shows the company early). */
+export const FTUE_FREE_FISHERMAN_AT_CATCH = 5;
+/** Don't interrupt the first minutes with the daily reward popup. */
+export const DAILY_POPUP_MIN_CATCHES = 25;
+export const FIRST_TREASURE_SECONDS = 25;
+
+// ---------------------------------------------------------------------------
+// Aquarium Museum: spend trophies
+// ---------------------------------------------------------------------------
+export type ExhibitId = 'feedingShow' | 'goldenExhibit' | 'hallOfFame' | 'crewTraining';
+export interface ExhibitDef { id: ExhibitId; name: string; description: string; icon: string; permanent: boolean; cost: number; growth: number; minutes?: number }
+export const EXHIBITS: Record<ExhibitId, ExhibitDef> = {
+  feedingShow: { id: 'feedingShow', name: 'Feeding Show', description: 'Double Haul for 30 minutes', icon: '🐬', permanent: false, cost: 3, growth: 1, minutes: 30 },
+  goldenExhibit: { id: 'goldenExhibit', name: 'Golden Exhibit', description: 'Golden Tide for 20 minutes', icon: '✨', permanent: false, cost: 2, growth: 1, minutes: 20 },
+  hallOfFame: { id: 'hallOfFame', name: 'Hall of Fame', description: '+5% gold from every fish, forever', icon: '🏛️', permanent: true, cost: 5, growth: 1.5 },
+  crewTraining: { id: 'crewTraining', name: 'Crew Training', description: '+5% fleet catches, forever', icon: '🎓', permanent: true, cost: 5, growth: 1.5 },
+};

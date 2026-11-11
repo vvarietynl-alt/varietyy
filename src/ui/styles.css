@@ -467,3 +467,51 @@ button { font-family: inherit; color: inherit; border: 0; cursor: pointer; }
 .set-row .progress { margin: 0; }
 .set-row .tag { position: static; display: block; width: 10px; height: 10px; border-radius: 50%; }
 .set-row small { color: var(--ink-soft); text-align: right; }
+
+/* ---------- review round: shop offers, start screen ---------- */
+.btn.short { opacity: 0.6; }
+.offer-card {
+  position: relative; background: linear-gradient(160deg, #fff6d6, #ffe3a3); border: 3px solid var(--gold);
+  border-radius: 18px; padding: 16px 14px 12px; margin: 8px 0 12px; display: flex; flex-direction: column; gap: 6px;
+}
+.offer-card b { font-size: 18px; }
+.offer-card ul { margin: 0; padding-left: 18px; font-weight: 700; font-size: 14px; line-height: 1.5; }
+.offer-card small { color: var(--ink-soft); font-weight: 700; }
+.offer-badge {
+  position: absolute; top: -11px; left: 14px; background: var(--red); color: #fff; font-weight: 800; font-size: 11px;
+  letter-spacing: 0.08em; padding: 2px 10px; border-radius: 10px;
+}
+.offer-timer { font-weight: 800; color: var(--red); font-size: 13px; }
+.first-buy {
+  background: linear-gradient(90deg, #a35cff, #3fa2ff); color: #fff; font-weight: 800; text-align: center;
+  border-radius: 12px; padding: 6px 10px; margin-bottom: 10px; font-size: 14px;
+}
+.pack-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.pack {
+  position: relative; background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 12px 4px 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; box-shadow: 0 3px 0 var(--line);
+}
+.pack.tagged { border-color: var(--gold); background: #fffbea; }
+.pack-tag {
+  position: absolute; top: -9px; background: var(--red); color: #fff; font-size: 10px; font-weight: 800;
+  padding: 1px 8px; border-radius: 8px; white-space: nowrap;
+}
+.pack-gems { font-size: 18px; line-height: 1.1; }
+.pack b { font-size: 17px; }
+.pack b s { color: var(--ink-soft); font-size: 12px; font-weight: 700; }
+.pack-price { background: var(--green); color: #fff; font-weight: 800; border-radius: 9px; padding: 1px 10px; font-size: 13px; margin-top: 2px; }
+.side-btn.offer { background: linear-gradient(#fff3c4, #ffd36b); animation: pulse 1.4s ease-in-out infinite; }
+.side-btn.offer span { color: var(--red); }
+.start-screen {
+  position: absolute; inset: 0; z-index: 40;
+  background: linear-gradient(180deg, rgba(8, 60, 110, 0.55), rgba(8, 60, 110, 0.15) 45%, rgba(8, 40, 80, 0.7));
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  padding: calc(var(--safe-top) + 18vh) 16px calc(var(--safe-bottom) + 12vh); color: #fff; text-align: center;
+  transition: opacity 0.45s;
+}
+.start-screen.out { opacity: 0; }
+.start-logo span { font-size: 84px; display: block; animation: whaleBob 2.4s ease-in-out infinite; }
+.start-logo h1 { margin: 0; font-size: 46px; font-weight: 800; letter-spacing: 0.02em; text-shadow: 0 4px 0 rgba(0,0,0,0.25); }
+.start-logo p { margin: 4px 0 0; font-weight: 700; font-size: 16px; opacity: 0.95; }
+.start-tap { font-weight: 800; font-size: 20px; animation: pulse 1.2s ease-in-out infinite; text-shadow: 0 2px 0 rgba(0,0,0,0.3); }
+@keyframes whaleBob { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-12px) rotate(4deg); } }

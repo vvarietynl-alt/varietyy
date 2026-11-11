@@ -89,6 +89,21 @@ Resultaat van de simulatie (constant actief spelen, slimme aankopen): level 1 �
 - **Snellere start**: prijscurve binnen elk level (eerste zones goedkoper), zone 2 opent na ±1 minuut
 - **Geheugenlek opgelost**: gedeelde geometrie, het aantal GPU-objecten blijft stabiel (was: groeide onbeperkt)
 
+## Review-ronde: eerste minuten, ruby-economie, aankopen
+
+- **Eerste minuten**: startscherm; de 3e vangst is altijd een zeldzame vis (onthullingskaart); na 5 vangsten komt de eerste
+  visser gratis (je ziet je bedrijf meteen); eerste schatkist na 25 s, eerste zee-evenement na 90 s; eerste missies leren de
+  basis; dagbeloning-popup pas na 25 vangsten; minder meldingen tegelijk
+- **Ruby-economie** (was 55–100 rubies per uur, waardoor kopen zinloos was): 5 missies per dag geven rubies (daarna goud),
+  missie wisselen 1× per 10 min, 5% van de kisten 1–2 rubies, 3 reclames voor rubies per dag → ±30 rubies per dag voor een
+  dagelijkse speler
+- **Aankopen**: pakketten 80–2800 rubies met "Popular"/"Best value", eerste aankoop dubbele rubies, eenmalig
+  **Starter Pack** (€2,99, 48 uur na de eerste boss), Captain's Pass; te weinig rubies → winkel opent met "je mist X"
+- **Aquarium Museum werkt**: trofeeën → tijdelijke boosts en permanente bonussen
+- **Vlootboten varen sneller** mee met je Engine-upgrade
+- Aankopen via `src/services/billing.ts` (testmodus: bevestiging, niets afgeschreven; in de Android-app Google Play Billing)
+- Speeltest-optie: `?timescale=8` speelt de game 8× versneld (alleen voor testen)
+
 ## Rubies en beloonde reclame
 
 - **Reclame alleen vrijwillig, op momenten dat het iets oplevert** (max. 12 per dag):

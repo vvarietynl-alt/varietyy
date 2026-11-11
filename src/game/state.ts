@@ -54,6 +54,7 @@ export interface GameState {
   stats: GameStats;
   /** Epoch ms of the last save; used for offline earnings. */
   lastSeen: number;
+  /** First-minutes flags (bitmask): 1 = early rare given, 2 = free fisherman given, 4 = start screen seen. */
   tutorialStep: number;
   settings: { sound: boolean; haptics: boolean; autoHire: boolean };
   /** Boost expiry times (epoch ms). */
@@ -73,6 +74,16 @@ export interface GameState {
   premium: Record<PermanentId, boolean> & { captainsPass: boolean };
   companyName: string;
   cosmetics: { boatSkin: BoatSkinId; skins: BoatSkinId[]; decor: DecorId[] };
+  /** Missions that paid rubies today (capped per day). */
+  missionRubies: { day: string; count: number };
+  /** Epoch ms of the last free mission swap. */
+  missionSkipAt: number;
+  /** "Free rubies" ads watched today. */
+  rubyAds: { day: string; count: number };
+  /** Shop offers. */
+  offers: { purchased: boolean; starterUntil: number; starterBought: boolean };
+  /** Aquarium Museum permanent exhibits (levels). */
+  exhibits: { hallOfFame: number; crewTraining: number };
   /** Atlas sets whose reward was claimed, e.g. "L1-common". */
   atlasSets: string[];
   /** Rewarded ads watched today. */
@@ -114,6 +125,11 @@ export function newGame(now = Date.now()): GameState {
     cosmetics: { boatSkin: 'classic', skins: ['classic'], decor: [] },
     ads: { day: '', count: 0 },
     atlasSets: [],
+    missionRubies: { day: '', count: 0 },
+    missionSkipAt: 0,
+    rubyAds: { day: '', count: 0 },
+    offers: { purchased: false, starterUntil: 0, starterBought: false },
+    exhibits: { hallOfFame: 0, crewTraining: 0 },
   };
 }
 
@@ -137,6 +153,10 @@ export function loadState(raw: string | null, now = Date.now()): GameState {
       cosmetics: { ...fresh.cosmetics, ...(data.cosmetics ?? {}) },
       ads: { ...fresh.ads, ...(data.ads ?? {}) },
       atlasSets: Array.isArray(data.atlasSets) ? data.atlasSets : [],
+      missionRubies: { ...fresh.missionRubies, ...(data.missionRubies ?? {}) },
+      rubyAds: { ...fresh.rubyAds, ...(data.rubyAds ?? {}) },
+      offers: { ...fresh.offers, ...(data.offers ?? {}) },
+      exhibits: { ...fresh.exhibits, ...(data.exhibits ?? {}) },
       atlas: { ...(data.atlas ?? {}) },
       zoneCatches: { ...(data.zoneCatches ?? {}) },
       version: SAVE_VERSION,

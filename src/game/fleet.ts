@@ -273,11 +273,16 @@ export class Fleet {
     return `${FISHERMAN_NAMES[b.tier]} · ${BOAT_CLASS_NAMES[boatClassFor(b.tier)]}`;
   }
 
+  /** Fleet boats share the player's engine upgrades (presentation only). */
+  private speedOf(b: FleetBoat): number {
+    return b.speed * (1 + this.game.state.upgrades.engine * 0.06);
+  }
+
   private moveStraight(b: FleetBoat, tx: number, tz: number, dt: number): boolean {
     const dx = tx - b.x;
     const dz = tz - b.z;
     const d = Math.hypot(dx, dz);
-    const step = b.speed * dt;
+    const step = this.speedOf(b) * dt;
     if (d <= step) {
       b.x = tx;
       b.z = tz;
@@ -296,7 +301,7 @@ export class Fleet {
     const da = angleDiff(a, ta);
     const dr = tr - r;
     const dist = Math.hypot(r * da, dr);
-    const step = b.speed * dt;
+    const step = this.speedOf(b) * dt;
     let nr: number;
     let na: number;
     let done = false;

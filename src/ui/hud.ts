@@ -42,6 +42,8 @@ export class Hud {
   private boostChips = h('div', { class: 'boost-chips' });
   private doubleOffer: HTMLElement | null = null;
   private eventChip = h('div', { class: 'event-chip', style: 'display:none' });
+  private offerBtn!: HTMLButtonElement;
+  private offerTimer = h('span');
   private adBoostBtn: HTMLButtonElement;
   private boostKey = '';
   private sideBadges: { missions: HTMLElement; daily: HTMLElement; boosts: HTMLElement; voyage: HTMLElement };
@@ -92,6 +94,8 @@ export class Hud {
       return { badge, btn };
     };
     this.sideBadges = { missions: sideBtn('missions', '📜', 'Missions').badge, daily: sideBtn('daily', '🎁', 'Daily').badge, boosts: sideBtn('boosts', '⚡', 'Boost').badge, voyage: h('i') };
+    this.offerBtn = pressButton({ class: 'side-btn offer', 'aria-label': 'Special offer' }, () => { host.sfx('click'); this.panels.openShop('rubies'); }, '🎁', this.offerTimer);
+    side.append(this.offerBtn);
     const v = sideBtn('lighthouse', '🗼', 'Voyage');
     this.sideBadges.voyage = v.badge;
     this.voyageBtn = v.btn;
@@ -138,6 +142,15 @@ export class Hud {
       const id = el.dataset.id as BoostId;
       const icon = id === 'doubleHaul' ? '💰×2' : id === 'strongArms' ? '💪×2' : '✨×3';
       setText(el, `${icon} ${formatDuration(g.boostSecondsLeft(id))}`);
+    }
+
+    // one-time starter offer with countdown
+    const offer = g.starterOfferActive;
+    const wantOffer = offer ? '' : 'none';
+    if (this.offerBtn.style.display !== wantOffer) this.offerBtn.style.display = wantOffer;
+    if (offer) {
+      const left = (st.offers.starterUntil - g.now()) / 1000;
+      setText(this.offerTimer, left > 3600 ? `${Math.floor(left / 3600)}h` : `${Math.ceil(left / 60)}m`);
     }
 
     // sea event banner
@@ -262,12 +275,18 @@ export class Hud {
     let text = '';
     let glow: DockId | null = null;
     const hooked = this.world.target?.state === 'hooked';
-    if (this.panels.current || this.host.isIslandMode() || this.modal) text = '';
+    if (this.panels.current || this.host.isIslandMode() || this.modal || document.querySelector('.start-screen')) text = '';
     else if (this.world.fight && !this.world.fight.over) text = '';
     else if (s.stats.fishCaught === 0) text = hooked ? 'Tap anywhere, fast! Reel in the fish 🎣' : 'Your boat sails to the nearest fish…';
-    else if (s.fishermen[0] === 0 && s.gold >= fishermanCost(0, 0)) {
-      text = 'Hire a fisherman at the School — they catch fish for you, even offline!';
+    else if (s.stats.missionsDone === 0 && claimableMissions(g) > 0) {
+      text = 'Mission complete! Tap 📜 Missions on the left to collect your rubies.';
+    } else if (s.fishermen[0] <= 1 && s.stats.fishermenHired < 3 && s.gold >= fishermanCost(0, s.fishermen[0])) {
+      text = s.fishermen[0] === 0
+        ? 'Hire a fisherman at the School — they catch fish for you, even offline!'
+        : 'Hire more fishermen at the School — every one sails out and earns gold for you!';
       glow = 'fishermenSchool';
+    } else if (isBossZone(s.activeZone) && !s.bossesDefeated[s.activeZone === 5 ? 0 : 1] && s.stats.bossesDefeated === 0) {
+      text = '🐋 A boss! Tap as fast as you can. Too strong? Upgrade your rod first.';
     } else if (s.upgrades.skill === 0 && s.gold >= upgradeCost('skill', 0)) {
       text = 'Upgrade your rod at the Fishing Workshop for stronger taps.';
       glow = 'fishingWorkshop';
@@ -350,7 +369,7 @@ export class Hud {
         if (this.game.spendRubies(BOSS_CONTINUE_RUBIES)) accept();
         else this.host.sfx('error');
       }, `+${BOSS_CONTINUE_SECONDS} seconds for ${BOSS_CONTINUE_RUBIES} `, ruby());
-      setDisabled(rubyBtn, this.game.state.rubies < BOSS_CONTINUE_RUBIES);
+      if (this.game.state.rubies < BOSS_CONTINUE_RUBIES) rubyBtn.style.display = 'none';
       return [
         h('div', { class: 'emoji' }, '⏱️'),
         h('h2', null, 'So close!'),
@@ -384,6 +403,19 @@ export class Hud {
       h('h2', null, `Level ${level} conquered!`),
       h('p', null, `Both bosses are defeated. Save up and sail to ${themeFor(level + 1).name} from the Research Center.${level >= PRESTIGE_MIN_LEVEL ? ' Or start a New Voyage at the Lighthouse for pearls!' : ''}`),
       h('div', { class: 'actions' }, pressButton({ class: 'btn gold wide' }, () => { close(); }, 'Great!')),
+    ]);
+  }
+
+  /** One-time starter offer, shown after the first boss. */
+  showStarterOffer(onSee: () => void): void {
+    this.showModal((close) => [
+      h('div', { class: 'emoji' }, '🎁'),
+      h('h2', null, 'Captain\'s Starter Pack'),
+      h('p', null, 'You beat your first boss! A one-time offer for 48 hours: 250 rubies, the Ocean Blue boat and 2 hours of Double Haul.'),
+      h('div', { class: 'actions' },
+        pressButton({ class: 'btn gold wide' }, () => { close(); onSee(); }, 'See the offer'),
+        pressButton({ class: 'btn ghost wide' }, close, 'Maybe later'),
+      ),
     ]);
   }
 

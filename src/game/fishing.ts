@@ -17,6 +17,8 @@ import {
   SEA_EVENT_INTERVAL,
   SEA_EVENTS,
   type SeaEventKind,
+  FIRST_TREASURE_SECONDS,
+  FTUE_RARE_AT_CATCH,
   TREASURE_INTERVAL,
   TREASURE_LIFETIME,
 } from '../data/balance';
@@ -134,7 +136,7 @@ export class FishingWorld {
   frenzy = 0;
   private time = 0;
   private lastTap = -10;
-  private treasureTimer = 40;
+  private treasureTimer = FIRST_TREASURE_SECONDS;
   /** Running sea event, if any. */
   seaEvent: { kind: SeaEventKind; left: number } | null = null;
   private eventTimer = SEA_EVENT_FIRST;
@@ -323,6 +325,14 @@ export class FishingWorld {
   }
 
   private setTarget(f: FishEntity): void {
+    // first minutes: the 3rd catch is always a rare fish
+    const s = this.game.state;
+    if (s.stats.fishCaught === FTUE_RARE_AT_CATCH - 1 && !(s.tutorialStep & 1) && f.rarity === 'common') {
+      s.tutorialStep |= 1;
+      f.rarity = 'rare';
+      f.species = this.game.pickSpecies('rare');
+      f.maxHp = f.hp = fishHp(s.level, fishZoneFor(this.zone), 'rare');
+    }
     const old = this.target;
     if (old && old.state === 'flee') old.state = 'swim';
     this.targetId = f.id;

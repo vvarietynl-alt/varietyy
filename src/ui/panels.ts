@@ -20,7 +20,12 @@ import {
   PERMANENTS,
   TIME_WARPS,
   ENGINE_VISUAL_TIERS,
+  EXHIBITS,
+  RUBY_PACKS,
+  STARTER_PACK,
+  RUBY_ADS_PER_DAY,
 } from '../data/balance';
+import type { Billing } from '../services/billing';
 import type { Ads } from '../services/ads';
 import { ALL_SPECIES, bossSpecies, themeFor, type FishSpecies } from '../data/fish';
 import {
@@ -40,7 +45,7 @@ import {
 } from '../game/economy';
 import { BOAT_CLASS_NAMES, boatClassFor, boatsForTier, MAX_FLEET_BOATS } from '../game/fleet';
 import { formatDuration, formatNumber } from '../game/format';
-import { canClaimDaily, claimDaily, claimMission, dailyStreak, ensureMissions, missionDone, missionLabel, missionProgress, nextDailyIndex, skipMission } from '../game/missions';
+import { canClaimDaily, claimDaily, claimMission, dailyStreak, ensureMissions, missionDone, missionLabel, missionProgress, missionRubiesLeftToday, missionRubyReward, nextDailyIndex, skipCooldown, skipMission } from '../game/missions';
 import type { Game } from '../game/game';
 import type { BuildingId } from '../render/models';
 import { coin, h, pressButton, ruby, setDisabled, setText } from './dom';
@@ -57,6 +62,8 @@ export interface PanelHost {
   confirmReset(): void;
   confirmVoyage(): void;
   ads: Ads;
+  billing: Billing;
+  toast(text: string): void;
 }
 
 interface PanelDef {
@@ -86,6 +93,20 @@ export class PanelManager {
 
   constructor(private container: HTMLElement, private host: PanelHost) {
     this.defs = this.createDefs();
+  }
+
+  openShop(tab: 'rubies' | 'bonuses' | 'style'): void {
+    this.shopTab = tab;
+    this.open('shop');
+  }
+
+  /** Not enough rubies: open the shop on the rubies tab and say how many are missing. */
+  needRubies(cost: number): void {
+    const missing = Math.ceil(cost - this.host.game.state.rubies);
+    this.shopTab = 'rubies';
+    this.open('shop');
+    this.host.sfx('error');
+    this.host.toast(`💎 You need ${missing} more rubies`);
   }
 
   open(id: PanelId): void {
@@ -350,15 +371,26 @@ export class PanelManager {
         title: () => 'Aquarium Museum',
         subtitle: () => 'Trade trophy fish for bonuses',
         build: (body) => {
+          const ups: Updater[] = [];
           const t = h('b');
           body.append(
-            h('div', { class: 'summary' }, h('span', null, 'Trophies ', t)),
-            h('p', { class: 'note' }, 'Trophies drop from endangered (10%), legendary (always) and mythical fish. The museum opens in a next update with these bonuses:'),
-            ...['More income for a while', 'Faster fishermen for a while', 'More fishing skill for a while', 'Permanent income bonus', 'Permanent fishermen speed'].map((b) =>
-              h('div', { class: 'row locked' }, h('div', { class: 'ico' }, '🏆'), h('div', { class: 'info' }, h('b', null, b))),
-            ),
+            h('div', { class: 'summary' }, h('span', null, '🏆 Trophies ', t), h('span', null, 'From endangered (10%), legendary and boss fish')),
           );
-          return [() => setText(t, String(s().trophies))];
+          for (const def of Object.values(EXHIBITS)) {
+            const lvl = h('span', { class: 'lvl' });
+            const price = h('span');
+            const btn = pressButton({ class: 'btn gold small' }, () => this.host.sfx(game.buyExhibit(def.id) ? 'buy' : 'error'), '🏆 ', price);
+            body.append(h('div', { class: 'row' }, h('div', { class: 'ico' }, def.icon),
+              h('div', { class: 'info' }, h('b', null, def.name, ' ', lvl), h('small', null, def.permanent ? def.description : `${def.description} · temporary`)), btn));
+            ups.push(() => {
+              const cost = game.exhibitCost(def.id);
+              setText(price, String(cost));
+              setText(lvl, def.id === 'hallOfFame' || def.id === 'crewTraining' ? `Lv ${s().exhibits[def.id]}` : '');
+              setDisabled(btn, s().trophies < cost);
+            });
+          }
+          ups.push(() => setText(t, String(s().trophies)));
+          return ups;
         },
       },
 
@@ -492,29 +524,71 @@ export class PanelManager {
           }
           body.append(seg);
           const rubyBtn = (cost: number, onBuy: () => boolean, label?: string) => {
-            const b = pressButton({ class: 'btn gold small' }, () => this.host.sfx(onBuy() ? 'buy' : 'error'), label ?? '', label ? ' ' : '', String(cost), ' ', ruby());
-            ups.push(() => setDisabled(b, s().rubies < cost));
+            const b = pressButton({ class: 'btn gold small' }, () => {
+              if (s().rubies < cost) return this.needRubies(cost);
+              this.host.sfx(onBuy() ? 'buy' : 'error');
+            }, label ?? '', label ? ' ' : '', String(cost), ' ', ruby());
+            ups.push(() => b.classList.toggle('short', s().rubies < cost));
             return b;
           };
 
           if (this.shopTab === 'rubies') {
-            const adBtn = pressButton({ class: 'btn blue small' }, () => { void ads.watch('free-rubies', () => { game.addRubies(AD_RUBY_REWARD); this.host.sfx('buy'); }); }, `${ads.icon} Watch`);
-            ups.push(() => setDisabled(adBtn, !ads.available));
-            body.append(
-              h('div', { class: 'row' }, h('div', { class: 'ico' }, '📺'), h('div', { class: 'info' }, h('b', null, `Free rubies`), h('small', null, `Watch a short video: +${AD_RUBY_REWARD} rubies`)), adBtn),
-              ...[['A handful', 80, '€1.99'], ['A chest', 500, '€9.99'], ['A treasure', 1200, '€19.99']].map(([name, n, price]) =>
-                h('div', { class: 'row locked' }, h('div', { class: 'ico' }, '💎'), h('div', { class: 'info' }, h('b', null, `${name} of rubies`), h('small', null, `${n} rubies`)), h('button', { class: 'btn small', disabled: true }, String(price))),
-              ),
-            );
+            const billing = this.host.billing;
+            const buy = (id: string, label: string, price: string) => () => {
+              void billing.buy(id, label, price).then((r) => {
+                if (r === null) return;
+                this.host.sfx('buy');
+                this.host.reward(r > 0 ? `💎 +${formatNumber(r)} rubies!` : '🎫 Thank you!');
+                this.rebuild();
+              });
+            };
+            // starter pack: one-time offer after the first boss
+            if (game.starterOfferActive) {
+              const timer = h('span', { class: 'offer-timer' });
+              ups.push(() => setText(timer, `⏳ ${formatDuration((s().offers.starterUntil - game.now()) / 1000)} left`));
+              body.append(h('div', { class: 'offer-card' },
+                h('div', { class: 'offer-badge' }, 'ONE-TIME OFFER'),
+                h('b', null, '🎁 Captain\'s Starter Pack'),
+                h('ul', null,
+                  h('li', null, `💎 ${STARTER_PACK.rubies} rubies`),
+                  h('li', null, `⛵ Ocean Blue boat`),
+                  h('li', null, `💰 Double Haul for ${STARTER_PACK.boostHours} hours`),
+                ),
+                h('small', null, 'Worth over 3× a normal ruby pack.'),
+                timer,
+                pressButton({ class: 'btn gold wide pulse' }, buy(STARTER_PACK.id, "Captain's Starter Pack", STARTER_PACK.price), `Get it for ${STARTER_PACK.price}`),
+              ));
+            }
+            const first = !s().offers.purchased;
+            if (first) body.append(h('div', { class: 'first-buy' }, '✨ First purchase: DOUBLE rubies on any pack!'));
+            const grid = h('div', { class: 'pack-grid' });
+            RUBY_PACKS.forEach((p, i) => {
+              grid.append(pressButton({ class: `pack${p.tag ? ' tagged' : ''}` }, buy(p.id, `${p.rubies} rubies`, p.price),
+                p.tag ? h('span', { class: 'pack-tag' }, p.tag) : null,
+                h('div', { class: 'pack-gems' }, '💎'.repeat(Math.min(3, i + 1))),
+                h('b', null, first ? h('s', null, String(p.rubies)) : null, first ? ' ' : '', formatNumber(p.rubies * (first ? 2 : 1))),
+                h('span', { class: 'pack-price' }, p.price),
+              ));
+            });
+            const adBtn = pressButton({ class: 'btn blue small' }, () => {
+              void ads.watch('free-rubies', () => { game.addRubies(AD_RUBY_REWARD); game.recordRubyAd(); this.host.sfx('buy'); });
+            }, `${ads.icon} Watch`);
+            const adNote = h('small');
+            ups.push(() => {
+              const left = game.rubyAdsLeftToday;
+              setDisabled(adBtn, !ads.available || left <= 0);
+              setText(adNote, left > 0 ? `Watch a short video: +${AD_RUBY_REWARD} rubies (${left}/${RUBY_ADS_PER_DAY} left today)` : 'Come back tomorrow for more free rubies');
+            });
             const pass = s().premium.captainsPass;
-            const passBtn = pressButton({ class: pass ? 'btn small' : 'btn blue small' }, () => { s().premium.captainsPass = !s().premium.captainsPass; this.host.sfx('buy'); this.rebuild(); }, pass ? 'Active (test)' : 'Try (test)');
             body.append(
+              grid,
+              h('div', { class: 'row' }, h('div', { class: 'ico' }, '📺'), h('div', { class: 'info' }, h('b', null, 'Free rubies'), adNote), adBtn),
               h('div', { class: 'voyage-card' },
                 h('b', null, "🎫 Captain's Pass"),
-                h('small', null, `Every ad reward without watching ads, plus +${CAPTAINS_PASS_DAILY_RUBIES} rubies with each daily reward. €4.99 — goes live with Google Play Billing.`),
-                passBtn,
+                h('small', null, `Every ad reward without watching ads, plus +${CAPTAINS_PASS_DAILY_RUBIES} rubies with each daily reward.`),
+                pass ? h('span', { class: 'owned' }, '✓ Active') : pressButton({ class: 'btn blue wide' }, buy('captains_pass', "Captain's Pass", '€4.99'), 'Get it for €4.99'),
               ),
-              h('p', { class: 'note' }, 'Real purchases go live with Google Play Billing in the Android app.'),
+              h('p', { class: 'note' }, billing.testMode ? 'Test mode: purchases charge nothing. Google Play Billing goes live in the Android app.' : ''),
             );
           } else if (this.shopTab === 'bonuses') {
             body.append(h('h3', { class: 'section-title' }, 'Forever (also after a New Voyage)'));
@@ -579,7 +653,7 @@ export class PanelManager {
                 this.host.reward(`+${formatNumber(r.gold)} gold · +${r.rubies} rubies`);
               } else this.host.sfx('error');
             }, 'Claim');
-            const skip = pressButton({ class: 'btn small', style: 'background:var(--panel-2);color:var(--ink);box-shadow:0 3px 0 var(--line)' }, () => { skipMission(game, m.id); this.host.sfx('click'); }, '↻');
+            const skip = pressButton({ class: 'btn small ghost' }, () => { this.host.sfx(skipMission(game, m.id) ? 'click' : 'error'); }, '↻');
             const double = pressButton({ class: 'btn blue small' }, () => {
               void this.host.ads.watch('mission-double', () => {
                 const r = claimMission(game, m.id);
@@ -603,14 +677,24 @@ export class PanelManager {
               const p = missionProgress(game, m);
               const done = missionDone(game, m);
               fill.style.width = `${(p / m.target) * 100}%`;
-              setText(count, done ? `Done! Reward: ${formatNumber(game.rewardGold(m.rewardMinutes))} gold + ${m.rewardRubies} 💎` : `${formatNumber(p)} / ${formatNumber(m.target)} · reward ${m.rewardRubies} 💎 + gold`);
+              const rub = missionRubyReward(game, m);
+              const reward = rub > 0 ? `${formatNumber(game.rewardGold(m.rewardMinutes))} gold + ${rub} 💎` : `${formatNumber(game.rewardGold(m.rewardMinutes))} gold`;
+              setText(count, done ? `Done! Reward: ${reward}` : `${formatNumber(p)} / ${formatNumber(m.target)} · ${reward}`);
+              const cd = skipCooldown(game);
+              setDisabled(skip, cd > 0);
+              setText(skip, cd > 0 ? `↻ ${Math.ceil(cd / 60)}m` : '↻');
               setDisabled(claim, !done);
               claim.classList.toggle('pulse', done);
               skip.style.display = done ? 'none' : '';
               double.style.display = done && this.host.ads.available ? '' : 'none';
             });
           }
-          body.append(h('p', { class: 'note' }, 'New missions appear as soon as you claim one. Tap ↻ to swap a mission.'));
+          const rubyNote = h('p', { class: 'note' });
+          ups.push(() => {
+            const left = missionRubiesLeftToday(game);
+            setText(rubyNote, `${left > 0 ? `${left} more missions pay rubies today.` : 'Ruby rewards are back tomorrow — missions still pay gold.'} You can swap one mission every 10 minutes.`);
+          });
+          body.append(rubyNote);
           return ups;
         },
       },
@@ -650,7 +734,10 @@ export class PanelManager {
           const ups: Updater[] = [];
           for (const def of Object.values(BOOSTS)) {
             const left = h('small', { class: 'lvl' });
-            const buyBtn = pressButton({ class: 'btn gold small' }, () => this.host.sfx(game.buyBoost(def.id) ? 'buy' : 'error'), `${def.rubyCost} `, ruby());
+            const buyBtn = pressButton({ class: 'btn gold small' }, () => {
+              if (s().rubies < def.rubyCost) return this.needRubies(def.rubyCost);
+              this.host.sfx(game.buyBoost(def.id) ? 'buy' : 'error');
+            }, `${def.rubyCost} `, ruby());
             const buttons = h('div', { class: 'buy' }, buyBtn);
             if (def.ad) buttons.append(pressButton({ class: 'btn blue small' }, () => { game.activateBoost(def.id, def.minutes); this.host.sfx('buy'); }, '📺 Free'));
             body.append(h('div', { class: 'row' },
@@ -661,7 +748,7 @@ export class PanelManager {
             ups.push(() => {
               const sec = game.boostSecondsLeft(def.id);
               setText(left, sec > 0 ? `Active: ${formatDuration(sec)} left` : '');
-              setDisabled(buyBtn, s().rubies < def.rubyCost);
+              buyBtn.classList.toggle('short', s().rubies < def.rubyCost);
             });
           }
           body.append(h('p', { class: 'note' }, 'Boost time stacks (up to 4 hours) and keeps running while you are away. 📺 = watch an ad (test mode).'));
