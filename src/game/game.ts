@@ -1,4 +1,7 @@
 import {
+  ATLAS_SET_BONUS,
+  ATLAS_SET_RUBIES,
+  type AtlasGroup,
   AD_DAILY_LIMIT,
   BOAT_SKINS,
   type BoatSkinId,
@@ -31,7 +34,7 @@ import {
   type UpgradeId,
   ZONES_PER_LEVEL,
 } from '../data/balance';
-import { bossSpecies, goldfishSpecies, speciesFor, type FishSpecies } from '../data/fish';
+import { ALL_SPECIES, bossSpecies, goldfishSpecies, speciesFor, type FishSpecies } from '../data/fish';
 import {
   bestFishingZone,
   bossGold,
@@ -53,6 +56,7 @@ export type GameEvent =
   | { type: 'chest'; reward: ChestReward }
   | { type: 'boost'; boost: BoostId; minutes: number }
   | { type: 'voyage'; pearls: number }
+  | { type: 'atlas-set'; key: string; rubies: number }
   | { type: 'goldfish'; species: FishSpecies; gold: number }
   | { type: 'boss-defeated'; species: FishSpecies; gold: number; levelComplete: boolean }
   | { type: 'zone-unlocked'; zone: number }
@@ -81,6 +85,9 @@ const TROPHY_CHANCE: Partial<Record<CatchableRarity, number>> = { endangered: 0.
 export class Game {
   state: GameState;
   private listeners = new Set<Listener>();
+  /** Gold multiplier from a running sea event (set by the FishingWorld). */
+  eventGoldMult = 1;
+
   /** Clock for boosts (injectable for tests). */
   now: () => number = Date.now;
 
@@ -116,7 +123,44 @@ export class Game {
 
   /** Gold multiplier for fish: Double Haul boost and the permanent pearl bonus. */
   get incomeMult(): number {
-    return (this.isBoostActive('doubleHaul') ? 2 : 1) * this.pearlBonus * (this.state.premium.goldenHull ? 2 : 1);
+    return (this.isBoostActive('doubleHaul') ? 2 : 1) * this.pearlBonus * (this.state.premium.goldenHull ? 2 : 1) * this.atlasBonus;
+  }
+
+  /** Permanent bonus from completed Atlas sets. */
+  get atlasBonus(): number {
+    return 1 + this.state.atlasSets.length * ATLAS_SET_BONUS;
+  }
+
+  /** Progress of the five Atlas sets of a hand-made level (1–10). */
+  atlasSets(level: number): { group: AtlasGroup; key: string; have: number; total: number; claimed: boolean; rubies: number }[] {
+    const groups: AtlasGroup[] = ['common', 'rare', 'endangered', 'legendary', 'special'];
+    return groups.map((group) => {
+      const list = ALL_SPECIES.filter((sp) => sp.level === level && (group === 'special' ? sp.rarity === 'mythical' || sp.rarity === 'goldfish' : sp.rarity === group));
+      const key = `L${level}-${group}`;
+      return {
+        group,
+        key,
+        have: list.filter((sp) => this.state.atlas[sp.id]).length,
+        total: list.length,
+        claimed: this.state.atlasSets.includes(key),
+        rubies: ATLAS_SET_RUBIES[group],
+      };
+    });
+  }
+
+  claimableAtlasSets(): number {
+    let n = 0;
+    for (let l = 1; l <= 10; l++) for (const set of this.atlasSets(l)) if (!set.claimed && set.have === set.total) n++;
+    return n;
+  }
+
+  claimAtlasSet(level: number, group: AtlasGroup): boolean {
+    const set = this.atlasSets(level).find((o) => o.group === group);
+    if (!set || set.claimed || set.have < set.total) return false;
+    this.state.atlasSets.push(set.key);
+    this.state.rubies += set.rubies;
+    this.emit({ type: 'atlas-set', key: set.key, rubies: set.rubies });
+    return true;
   }
 
   /** Permanent income multiplier from all pearls ever earned. */
@@ -369,7 +413,7 @@ export class Game {
     const s = this.state;
     const rarity = species.rarity as CatchableRarity;
     const lucky = this.rnd() < this.luckyChance;
-    const gold = fishGold(s.level, zone, rarity) * this.incomeMult * (lucky ? LUCKY_CATCH_MULT : 1);
+    const gold = fishGold(s.level, zone, rarity) * this.incomeMult * this.eventGoldMult * (lucky ? LUCKY_CATCH_MULT : 1);
     if (rarity !== 'common') s.stats.rareCaught++;
     const firstTime = !s.atlas[species.id];
     s.atlas[species.id] = (s.atlas[species.id] ?? 0) + 1;

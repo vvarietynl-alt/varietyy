@@ -92,7 +92,10 @@ export class FleetRenderer {
     for (const [id, m] of this.models) {
       if (!alive.has(id)) {
         this.scene.remove(m.group);
-        this.scene.remove(this.lines.get(id)!);
+        const line = this.lines.get(id)!;
+        this.scene.remove(line);
+        line.geometry.dispose();
+        (line.material as THREE.Material).dispose();
         this.models.delete(id);
         this.lines.delete(id);
       }

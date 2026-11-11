@@ -1,4 +1,4 @@
-import { BOOSTS, type BoostId, BOSS_CONTINUE_RUBIES, BOSS_CONTINUE_SECONDS, DOUBLE_OFFER_SECONDS, isBossZone, OFFLINE_TRIPLE_RUBY_COST, PRESTIGE_MIN_LEVEL, ZONES_PER_LEVEL } from '../data/balance';
+import { SEA_EVENTS, BOOSTS, type BoostId, BOSS_CONTINUE_RUBIES, BOSS_CONTINUE_SECONDS, DOUBLE_OFFER_SECONDS, isBossZone, OFFLINE_TRIPLE_RUBY_COST, PRESTIGE_MIN_LEVEL, ZONES_PER_LEVEL } from '../data/balance';
 import { canClaimDaily, claimableMissions } from '../game/missions';
 import type { Ads } from '../services/ads';
 import { bossSpecies, themeFor } from '../data/fish';
@@ -41,6 +41,7 @@ export class Hud {
   private modal: HTMLElement | null = null;
   private boostChips = h('div', { class: 'boost-chips' });
   private doubleOffer: HTMLElement | null = null;
+  private eventChip = h('div', { class: 'event-chip', style: 'display:none' });
   private adBoostBtn: HTMLButtonElement;
   private boostKey = '';
   private sideBadges: { missions: HTMLElement; daily: HTMLElement; boosts: HTMLElement; voyage: HTMLElement };
@@ -98,7 +99,7 @@ export class Hud {
     this.adBoostBtn = pressButton({ class: 'ad-boost' }, () => {
       void host.ads.watch('boost-double-haul', () => { game.activateBoost('doubleHaul', BOOSTS.doubleHaul.minutes); host.sfx('buy'); });
     }, '');
-    ui.append(hud, this.zonebar, this.nextZone, side, this.combo, this.toasts, this.adBoostBtn, dock);
+    ui.append(hud, this.zonebar, this.nextZone, this.eventChip, side, this.combo, this.toasts, this.adBoostBtn, dock);
   }
 
   private updateSide(): void {
@@ -137,6 +138,16 @@ export class Hud {
       const id = el.dataset.id as BoostId;
       const icon = id === 'doubleHaul' ? '💰×2' : id === 'strongArms' ? '💪×2' : '✨×3';
       setText(el, `${icon} ${formatDuration(g.boostSecondsLeft(id))}`);
+    }
+
+    // sea event banner
+    const ev = this.world.seaEvent;
+    const wantEv = ev ? '' : 'none';
+    if (this.eventChip.style.display !== wantEv) this.eventChip.style.display = wantEv;
+    if (ev) {
+      const def = SEA_EVENTS[ev.kind];
+      setText(this.eventChip, `${def.icon} ${def.name} — ${def.description} · ${Math.ceil(ev.left)}s`);
+      this.eventChip.classList.toggle('gold', ev.kind === 'goldenHour');
     }
 
     // combo / frenzy meter
@@ -240,6 +251,7 @@ export class Hud {
     show('fishermenSchool', s.gold >= cheapest && (tier === -1 || tier <= 1 || s.gold >= fishermanCost(tier, 0)));
     show('fishingWorkshop', s.gold >= upgradeCost('skill', s.upgrades.skill) * 1.0 && s.upgrades.skill < 3);
     show('boatWorkshop', s.upgrades.autoGear === 0 && s.gold >= upgradeCost('autoGear', 0));
+    show('atlas', g.claimableAtlasSets() > 0);
   }
 
   // --- Tutorial hints (GDD "Training") -----------------------------------------------

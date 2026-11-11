@@ -418,3 +418,52 @@ button { font-family: inherit; color: inherit; border: 0; cursor: pointer; }
 }
 .text-input:focus { outline: none; border-color: var(--blue); }
 .btn.ghost { background: var(--panel-2); color: var(--ink); box-shadow: 0 4px 0 var(--line); }
+
+/* ---------- sea events, catch card, confetti, atlas sets ---------- */
+.event-chip {
+  position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-top) + 152px);
+  background: linear-gradient(90deg, #2fd9b9, #3fa2ff); color: #fff; font-weight: 800; font-size: 13px;
+  border-radius: 14px; padding: 4px 12px; box-shadow: 0 3px 0 rgba(0,0,0,0.2); white-space: nowrap; pointer-events: none;
+  max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis;
+}
+.event-chip.gold { background: linear-gradient(90deg, #ffb000, #ff7a1a); }
+.catch-card {
+  position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%);
+  width: 210px; padding: 14px 12px 12px; border-radius: 22px; text-align: center; overflow: hidden;
+  background: linear-gradient(170deg, #ffffff, #eef7ff); border: 4px solid var(--rare);
+  box-shadow: 0 0 0 6px rgba(255,255,255,0.4), 0 14px 40px rgba(0,0,0,0.35);
+  display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none;
+  animation: cardIn 0.45s cubic-bezier(.2,1.4,.4,1);
+}
+.catch-card.out { animation: cardOut 0.45s ease-in forwards; }
+@keyframes cardIn { from { transform: translate(-50%, -50%) scale(0.3) rotate(-12deg); opacity: 0; } }
+@keyframes cardOut { to { transform: translate(-50%, -120%) scale(0.6); opacity: 0; } }
+.catch-card small { font-weight: 800; letter-spacing: 0.12em; color: var(--ink-soft); font-size: 11px; }
+.catch-card img { width: 128px; height: 128px; }
+.catch-card b { font-size: 19px; line-height: 1.1; }
+.catch-card .cc-rarity { font-weight: 800; text-transform: capitalize; font-size: 14px; }
+.catch-card .cc-gold { font-weight: 800; display: flex; gap: 4px; align-items: center; }
+.catch-card .cc-shine {
+  position: absolute; inset: -50%; background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,0.8) 50%, transparent 60%);
+  animation: shine 1.4s ease-in-out 0.3s; transform: translateX(-60%);
+}
+@keyframes shine { to { transform: translateX(60%); } }
+.catch-card.rar-rare { border-color: var(--rare); } .catch-card.rar-rare .cc-rarity { color: var(--rare); }
+.catch-card.rar-endangered { border-color: var(--endangered); } .catch-card.rar-endangered .cc-rarity { color: var(--green-dark); }
+.catch-card.rar-legendary { border-color: var(--legendary); background: linear-gradient(170deg, #fff, #f3e9ff); } .catch-card.rar-legendary .cc-rarity { color: var(--legendary); }
+.catch-card.rar-mythical { border-color: var(--mythical); background: linear-gradient(170deg, #fff, #ffecec); } .catch-card.rar-mythical .cc-rarity { color: var(--mythical); }
+.catch-card.rar-goldfish { border-color: var(--goldfish); background: linear-gradient(170deg, #fff, #fff6d6); }
+.confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.confetti i {
+  position: absolute; top: -12px; width: 9px; height: 14px; border-radius: 2px;
+  animation-name: confettiFall; animation-timing-function: cubic-bezier(.3,.6,.6,1); animation-fill-mode: forwards;
+}
+@keyframes confettiFall { to { transform: translate(var(--x), 105vh) rotate(var(--r)); } }
+.atlas-sets { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.set-row {
+  display: grid; grid-template-columns: 12px 1fr 70px 34px auto; align-items: center; gap: 8px;
+  background: #fff; border: 2px solid var(--line); border-radius: 12px; padding: 5px 8px; font-weight: 700; font-size: 13px;
+}
+.set-row .progress { margin: 0; }
+.set-row .tag { position: static; display: block; width: 10px; height: 10px; border-radius: 50%; }
+.set-row small { color: var(--ink-soft); text-align: right; }

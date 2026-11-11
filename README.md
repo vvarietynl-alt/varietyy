@@ -80,6 +80,14 @@ Resultaat van de simulatie (constant actief spelen, slimme aankopen): level 1 �
 - Simulatie: `npm run sim -- --voyages 14` — elke reis komt ±10 levels verder dan de vorige, reizen duren geleidelijk langer
   (3 → 20 uur actief). De getallen blijven tot ongeveer level 200 binnen wat JavaScript aankan; daarboven stopt de game veilig.
 
+## Speelplezier (na speeltest)
+
+- **Zee-evenementen** elke 4–7 min: Fish Frenzy (grote school, ×2 goud, 30 s) of Golden Hour (regen van goudvissen, 20 s)
+- **Onthullingskaart** bij elke nieuwe zeldzame vis en bij een verslagen boss; **confetti** bij grote momenten
+- **Atlas-sets**: een volledige groep vissen per zee geeft rubies + permanent +2% goud
+- **Snellere start**: prijscurve binnen elk level (eerste zones goedkoper), zone 2 opent na ±1 minuut
+- **Geheugenlek opgelost**: gedeelde geometrie, het aantal GPU-objecten blijft stabiel (was: groeide onbeperkt)
+
 ## Rubies en beloonde reclame
 
 - **Reclame alleen vrijwillig, op momenten dat het iets oplevert** (max. 12 per dag):

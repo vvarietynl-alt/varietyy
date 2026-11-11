@@ -112,6 +112,15 @@ export const ZONE_PRICES: number[][] = [
  * Tuned with `npm run sim` to ≈25 min for level 1 growing to ≈3.5 h for
  * level 10 (≈15 h of active play in total, plus offline time).
  */
+/**
+ * Price curve inside every level (by fishing-zone ordinal; ordinal 0 of
+ * level N is the price to enter it). The first zones of a level are cheap so
+ * a new sea opens up quickly, the last ones cost more. Playtest: without it
+ * the first zone of a new level took ~10 minutes and zone 2 of the game 4.5.
+ */
+export const ZONE_PRICE_CURVE = [1, 0.3, 0.45, 0.65, 1, 1.25, 1.5, 1.8];
+/** Extra discount for the very first zones of the game. */
+export const FIRST_LEVEL_ZONE_DISCOUNT = [1, 0.5, 0.7, 0.85, 1, 1, 1, 1];
 export const LEVEL_PRICE_MULT = [90, 636, 933, 2843, 3976, 4387, 8340, 14020, 10084, 3177];
 /** Fish the player must catch in a zone before the next zone can be bought. */
 export function catchesToUnlockNext(zone: number): number {
@@ -369,8 +378,9 @@ export function levelBaseHp(level: number): number {
 
 /** Sheet zone price for a level and fishing-zone ordinal, extrapolated after level 10. */
 export function zoneBasePrice(level: number, ordinal: number): number {
-  if (level <= LEVEL_COUNT) return ZONE_PRICES[level - 1][ordinal];
-  return ZONE_PRICES[LEVEL_COUNT - 1][ordinal] * Math.pow(ENDLESS_PRICE_GROWTH, level - LEVEL_COUNT);
+  const curve = ZONE_PRICE_CURVE[ordinal] * (level === 1 ? FIRST_LEVEL_ZONE_DISCOUNT[ordinal] : 1);
+  if (level <= LEVEL_COUNT) return ZONE_PRICES[level - 1][ordinal] * curve;
+  return ZONE_PRICES[LEVEL_COUNT - 1][ordinal] * curve * Math.pow(ENDLESS_PRICE_GROWTH, level - LEVEL_COUNT);
 }
 
 /** Safety limit: beyond this the numbers would overflow. */
@@ -470,3 +480,24 @@ export const DECOR: Record<DecorId, DecorDef> = {
   fountain: { id: 'fountain', name: 'Fountain', icon: '⛲', rubies: 120 },
   statue: { id: 'statue', name: 'Golden whale statue', icon: '🐋', rubies: 250 },
 };
+
+// ---------------------------------------------------------------------------
+// Sea events and Atlas sets
+// ---------------------------------------------------------------------------
+export type SeaEventKind = 'school' | 'goldenHour';
+export interface SeaEventDef { kind: SeaEventKind; name: string; description: string; seconds: number; icon: string }
+export const SEA_EVENTS: Record<SeaEventKind, SeaEventDef> = {
+  school: { kind: 'school', name: 'Fish Frenzy', description: '×2 gold', seconds: 30, icon: '🐟' },
+  goldenHour: { kind: 'goldenHour', name: 'Golden Hour', description: 'koi everywhere', seconds: 20, icon: '🌅' },
+};
+/** First event after this many seconds of play, then every 4–7 minutes. */
+export const SEA_EVENT_FIRST = 150;
+export const SEA_EVENT_INTERVAL = [240, 420] as const;
+export const SCHOOL_FISH = 13;
+export const SCHOOL_GOLD_MULT = 2;
+export const GOLDEN_HOUR_GOLDFISH_PER_MINUTE = 9;
+
+/** Completing a group of species in the Atlas: rubies + permanent income bonus. */
+export type AtlasGroup = 'common' | 'rare' | 'endangered' | 'legendary' | 'special';
+export const ATLAS_SET_RUBIES: Record<AtlasGroup, number> = { common: 5, rare: 10, endangered: 15, legendary: 25, special: 20 };
+export const ATLAS_SET_BONUS = 0.02;

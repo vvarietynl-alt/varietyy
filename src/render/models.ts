@@ -27,8 +27,26 @@ export function flat(color: number, opts: { emissive?: number; transparent?: boo
   return m;
 }
 
+const geoCache = new Map<string, THREE.BufferGeometry>();
+/**
+ * Reuse identical geometries. Fish, splashes and crates are created all the
+ * time; without this every one of them left a geometry on the GPU (a leak
+ * that slowed phones down over a long session).
+ */
+export function shared<T extends THREE.BufferGeometry>(geo: T): T {
+  const params = (geo as unknown as { parameters?: unknown }).parameters;
+  const key = geo.type + JSON.stringify(params ?? geo.uuid);
+  const hit = geoCache.get(key);
+  if (hit) {
+    geo.dispose();
+    return hit as T;
+  }
+  geoCache.set(key, geo);
+  return geo;
+}
+
 function mesh(geo: THREE.BufferGeometry, color: number, opts?: Parameters<typeof flat>[1]): THREE.Mesh {
-  return new THREE.Mesh(geo, flat(color, opts));
+  return new THREE.Mesh(shared(geo), flat(color, opts));
 }
 
 // ---------------------------------------------------------------------------
@@ -590,11 +608,11 @@ export function createFleetBoat(tier: number, cls: 'rowboat' | 'fishingBoat' | '
     shape.lineTo(-width * 0.42, -len * 0.45);
     shape.lineTo(-width * 0.5, -len * 0.2);
     shape.quadraticCurveTo(-width * 0.55, len * 0.25, 0, len * 0.55);
-    const low = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: height * 0.65, bevelEnabled: false, curveSegments: 3 }), flat(hullColor));
+    const low = new THREE.Mesh(shared(new THREE.ExtrudeGeometry(shape, { depth: height * 0.65, bevelEnabled: false, curveSegments: 3 })), flat(hullColor));
     low.rotation.x = Math.PI / 2;
     low.position.y = height * 0.3;
     group.add(low);
-    const up = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: height * 0.35, bevelEnabled: false, curveSegments: 3 }), flat(trim));
+    const up = new THREE.Mesh(shared(new THREE.ExtrudeGeometry(shape, { depth: height * 0.35, bevelEnabled: false, curveSegments: 3 })), flat(trim));
     up.rotation.x = Math.PI / 2;
     up.position.y = height * 0.65;
     group.add(up);
@@ -693,7 +711,7 @@ export function createFleetBoat(tier: number, cls: 'rowboat' | 'fishingBoat' | '
     case 'mystic': {
       const deckY = hullFrom(4.2, 1.8, 1.0, 0x2b1f4a, color);
       const glow = flat(0x9dfff0, { emissive: 0x6fffe0 });
-      const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 0), glow);
+      const orb = new THREE.Mesh(shared(new THREE.IcosahedronGeometry(0.45, 0)), glow);
       orb.position.set(0, deckY + 2.2, 0);
       orb.userData.spin = true;
       group.add(orb);
@@ -834,12 +852,12 @@ export function createDecor(id: 'flowers' | 'lanterns' | 'fountain' | 'statue' |
       plinth.position.y = 0.3;
       g.add(plinth);
       const gold = flat(0xffc928, { metalness: 0.7, roughness: 0.3, emissive: 0x7a5200 });
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 5), gold);
+      const body = new THREE.Mesh(shared(new THREE.SphereGeometry(0.7, 8, 5)), gold);
       body.scale.set(0.7, 0.55, 1.4);
       body.position.y = 1.15;
       body.rotation.x = -0.4;
       g.add(body);
-      const tail = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.4), gold);
+      const tail = new THREE.Mesh(shared(new THREE.BoxGeometry(1.1, 0.08, 0.4)), gold);
       tail.position.set(0, 1.9, -0.75);
       tail.rotation.x = -0.9;
       g.add(tail);

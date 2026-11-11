@@ -112,6 +112,42 @@ export class Overlay {
     this.spawn(h('div', { class: 'float lucky' }, '🍀 LUCKY ×3'), p.x, p.y);
   }
 
+  /** Reveal card for a newly discovered (non-common) species. */
+  catchCard(name: string, rarity: string, image: string, gold: string): void {
+    this.root.querySelector('.catch-card')?.remove();
+    const stars = rarity === 'rare' ? '★' : rarity === 'endangered' ? '★★' : rarity === 'legendary' ? '★★★' : rarity === 'mythical' ? '👑' : '✨';
+    const el = h('div', { class: `catch-card rar-${rarity}` },
+      h('div', { class: 'cc-shine' }),
+      h('small', null, 'NEW SPECIES!'),
+      h('img', { src: image, alt: name }),
+      h('b', null, name),
+      h('span', { class: 'cc-rarity' }, `${stars} ${rarity}`),
+      h('span', { class: 'cc-gold' }, '+', coin(), gold),
+    );
+    this.root.append(el);
+    setTimeout(() => el.classList.add('out'), 2300);
+    setTimeout(() => el.remove(), 2800);
+  }
+
+  /** Confetti burst for big moments. */
+  confetti(): void {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const colors = ['#ffc928', '#ff5a8a', '#3fa2ff', '#3cc45a', '#ffffff', '#a35cff'];
+    const box = h('div', { class: 'confetti' });
+    for (let i = 0; i < 60; i++) {
+      const p = h('i');
+      p.style.left = `${Math.random() * 100}%`;
+      p.style.background = colors[i % colors.length];
+      p.style.animationDelay = `${Math.random() * 0.3}s`;
+      p.style.animationDuration = `${1.6 + Math.random() * 1.2}s`;
+      p.style.setProperty('--x', `${(Math.random() - 0.5) * 160}px`);
+      p.style.setProperty('--r', `${Math.random() * 720 - 360}deg`);
+      box.append(p);
+    }
+    this.root.append(box);
+    setTimeout(() => box.remove(), 3200);
+  }
+
   /** Big centred reward message. */
   rewardPop(text: string): void {
     const el = h('div', { class: 'reward-pop' }, text);

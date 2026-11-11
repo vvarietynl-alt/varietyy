@@ -112,7 +112,8 @@ game.on((e) => {
       const special = e.species.rarity !== 'common';
       sfx(special ? 'rare' : 'catch');
       vibrate(special ? 40 : 15, game.state.settings.haptics);
-      if (e.firstTime) hud.toast([`📖 New in the Atlas: ${e.species.name}`], special);
+      if (e.firstTime && special) overlay.catchCard(e.species.name, e.species.rarity, renderer.renderPreview(e.species), formatNumber(e.gold));
+      else if (e.firstTime) hud.toast([`📖 New in the Atlas: ${e.species.name}`]);
       if (e.trophy) hud.toast(['🏆 Trophy found!'], true);
       break;
     }
@@ -123,6 +124,8 @@ game.on((e) => {
       break;
     case 'boss-defeated':
       sfx('win');
+      overlay.confetti();
+      overlay.catchCard(e.species.name, 'mythical', renderer.renderPreview(e.species), formatNumber(e.gold));
       vibrate(120, game.state.settings.haptics);
       hud.toast([`🐋 ${e.species.name} caught! +`, coin(), formatNumber(e.gold)], true);
       if (e.levelComplete) setTimeout(() => hud.showLevelComplete(game.state.level), 1200);
@@ -130,6 +133,7 @@ game.on((e) => {
       break;
     case 'voyage':
       sfx('win');
+      overlay.confetti();
       overlay.rewardPop(`⛵ New Voyage! +${formatNumber(e.pearls)} 🐚`);
       hud.toast([`🐚 Gold from fish is now ×${formatNumber(game.pearlBonus)}`], true);
       break;
@@ -138,9 +142,14 @@ game.on((e) => {
       break;
     case 'zone-unlocked':
       hud.toast([`🗺️ Zone ${e.zone} unlocked!`], true);
+      overlay.confetti();
       save();
       break;
+    case 'atlas-set':
+      overlay.confetti();
+      break;
     case 'level-changed':
+      overlay.confetti();
       hud.toast([`⛵ Welcome to Level ${e.level}!`], true);
       panels.close();
       renderer.mode = 'sea';
@@ -174,6 +183,11 @@ world.on((e) => {
       overlay.rewardPop(r.kind === 'gold' ? `🧰 +${formatNumber(r.amount)} gold` : r.kind === 'rubies' ? `🧰 +${r.amount} rubies!` : `🧰 ${BOOSTS[r.boost].name} ${r.minutes} min!`);
       break;
     }
+    case 'sea-event-start':
+      sfx('win');
+      vibrate(80, game.state.settings.haptics);
+      overlay.rewardPop(e.kind === 'school' ? '🐟 FISH FRENZY! ×2 gold' : '🌅 GOLDEN HOUR!');
+      break;
     case 'frenzy-start':
       sfx('win');
       vibrate(60, game.state.settings.haptics);
@@ -295,4 +309,4 @@ function frame(now: number): void {
 requestAnimationFrame(frame);
 
 // Debug helpers for testing in the browser console.
-(window as unknown as Record<string, unknown>).whaleHunter = { game, world, fleet, save, h };
+(window as unknown as Record<string, unknown>).whaleHunter = { game, world, fleet, renderer, save, h };

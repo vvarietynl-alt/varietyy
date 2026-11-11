@@ -73,6 +73,8 @@ export interface GameState {
   premium: Record<PermanentId, boolean> & { captainsPass: boolean };
   companyName: string;
   cosmetics: { boatSkin: BoatSkinId; skins: BoatSkinId[]; decor: DecorId[] };
+  /** Atlas sets whose reward was claimed, e.g. "L1-common". */
+  atlasSets: string[];
   /** Rewarded ads watched today. */
   ads: { day: string; count: number };
 }
@@ -111,6 +113,7 @@ export function newGame(now = Date.now()): GameState {
     companyName: 'Whale Hunter Co.',
     cosmetics: { boatSkin: 'classic', skins: ['classic'], decor: [] },
     ads: { day: '', count: 0 },
+    atlasSets: [],
   };
 }
 
@@ -133,6 +136,7 @@ export function loadState(raw: string | null, now = Date.now()): GameState {
       premium: { ...fresh.premium, ...(data.premium ?? {}) },
       cosmetics: { ...fresh.cosmetics, ...(data.cosmetics ?? {}) },
       ads: { ...fresh.ads, ...(data.ads ?? {}) },
+      atlasSets: Array.isArray(data.atlasSets) ? data.atlasSets : [],
       atlas: { ...(data.atlas ?? {}) },
       zoneCatches: { ...(data.zoneCatches ?? {}) },
       version: SAVE_VERSION,

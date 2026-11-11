@@ -10,6 +10,13 @@ import {
   isBossZone,
   BOSS_CONTINUE_MAX_HP,
   BOSS_CONTINUE_SECONDS,
+  GOLDEN_HOUR_GOLDFISH_PER_MINUTE,
+  SCHOOL_FISH,
+  SCHOOL_GOLD_MULT,
+  SEA_EVENT_FIRST,
+  SEA_EVENT_INTERVAL,
+  SEA_EVENTS,
+  type SeaEventKind,
   TREASURE_INTERVAL,
   TREASURE_LIFETIME,
 } from '../data/balance';
@@ -103,6 +110,8 @@ export type WorldEvent =
   | { type: 'treasure-spawn'; treasure: Treasure }
   | { type: 'treasure-opened'; treasure: Treasure; reward: ChestReward }
   | { type: 'treasure-expired'; treasure: Treasure }
+  | { type: 'sea-event-start'; kind: SeaEventKind }
+  | { type: 'sea-event-end'; kind: SeaEventKind }
   | { type: 'frenzy-start' }
   | { type: 'frenzy-end' }
   | { type: 'boss-start'; boss: BossEntity; fight: BossFight }
@@ -126,6 +135,9 @@ export class FishingWorld {
   private time = 0;
   private lastTap = -10;
   private treasureTimer = 40;
+  /** Running sea event, if any. */
+  seaEvent: { kind: SeaEventKind; left: number } | null = null;
+  private eventTimer = SEA_EVENT_FIRST;
   fight: BossFight | null = null;
   boat: Boat;
   targetId: number | null = null;
@@ -173,6 +185,12 @@ export class FishingWorld {
     this.boss = null;
     this.bossCooldown = 0;
     this.continueOffer = false;
+    if (this.seaEvent) {
+      const kind = this.seaEvent.kind;
+      this.seaEvent = null;
+      this.game.eventGoldMult = 1;
+      this.emit({ type: 'sea-event-end', kind });
+    }
     const s = this.game.state;
     if (isBossZone(zone)) {
       const bossIndex = zone === 5 ? 0 : 1;
@@ -337,9 +355,11 @@ export class FishingWorld {
     }
     if (this.time - this.lastTap > COMBO_WINDOW * 1.5) this.combo = Math.max(0, this.combo - dt * 25);
     this.updateTreasure(dt);
+    this.updateSeaEvent(dt);
 
     // keep the school full
-    if (!this.boss && this.fish.length < FISH_PER_ZONE && this.rnd() < dt * 0.8) this.spawnFish();
+    const school = this.seaEvent?.kind === 'school';
+    if (!this.boss && this.fish.length < (school ? SCHOOL_FISH : FISH_PER_ZONE) && this.rnd() < dt * (school ? 4 : 0.8)) this.spawnFish();
 
     // fish movement
     for (const f of this.fish) {
@@ -376,8 +396,9 @@ export class FishingWorld {
     }
 
     // goldfish
-    const gpm = goldfishPerMinute(this.zone, u.radar) * this.game.goldfishMult * (this.frenzy > 0 ? FRENZY_GOLDFISH_MULT : 1);
-    if (gpm > 0 && !this.fight && this.goldfish.length < 2 && this.rnd() < (gpm / 60) * dt) {
+    const golden = this.seaEvent?.kind === 'goldenHour';
+    const gpm = (golden ? GOLDEN_HOUR_GOLDFISH_PER_MINUTE : goldfishPerMinute(this.zone, u.radar)) * this.game.goldfishMult * (this.frenzy > 0 ? FRENZY_GOLDFISH_MULT : 1);
+    if (gpm > 0 && !this.fight && this.goldfish.length < (golden ? 4 : 2) && this.rnd() < (gpm / 60) * dt) {
       const a = this.boat.heading + (this.rnd() - 0.5) * 2.4;
       const d = 6 + this.rnd() * 6;
       const g: Goldfish = { id: nextId++, x: this.boat.x + Math.sin(a) * d, z: this.boat.z + Math.cos(a) * d, ttl: GOLDFISH_LIFETIME };
@@ -390,6 +411,27 @@ export class FishingWorld {
 
     if (this.boss) this.updateBoss(dt, band.center);
     else this.updateFishing(dt, band);
+  }
+
+  private updateSeaEvent(dt: number): void {
+    if (this.seaEvent) {
+      this.seaEvent.left -= dt;
+      if (this.seaEvent.left <= 0) {
+        const kind = this.seaEvent.kind;
+        this.seaEvent = null;
+        this.game.eventGoldMult = 1;
+        this.emit({ type: 'sea-event-end', kind });
+      }
+      return;
+    }
+    this.eventTimer -= dt;
+    if (this.eventTimer > 0 || this.boss || this.fight) return;
+    this.eventTimer = SEA_EVENT_INTERVAL[0] + this.rnd() * (SEA_EVENT_INTERVAL[1] - SEA_EVENT_INTERVAL[0]);
+    // golden koi only exist from zone 2; before that it is always a school
+    const kind: SeaEventKind = this.zone >= 2 && this.rnd() < 0.4 ? 'goldenHour' : 'school';
+    this.seaEvent = { kind, left: SEA_EVENTS[kind].seconds };
+    this.game.eventGoldMult = kind === 'school' ? SCHOOL_GOLD_MULT : 1;
+    this.emit({ type: 'sea-event-start', kind });
   }
 
   private updateTreasure(dt: number): void {

@@ -6,7 +6,7 @@ import type { Game } from '../game/game';
 import type { Fleet } from '../game/fleet';
 import { FleetRenderer } from './fleet';
 import { BOAT_SKINS, type DecorId } from '../data/balance';
-import { type BoatModel, type BuildingId, createBoat, createBottle, createDecor, createFish, createIsland, createRock, createTreasureChest, flat } from './models';
+import { type BoatModel, type BuildingId, createBoat, createBottle, createDecor, createFish, createIsland, createRock, createTreasureChest, flat, shared } from './models';
 import { createOcean } from './ocean';
 
 const RARITY_SIZE: Record<CatchableRarity, number> = { common: 0.85, rare: 1.0, endangered: 1.15, legendary: 1.4 };
@@ -28,6 +28,12 @@ interface Particle {
 }
 
 export type CameraMode = 'sea' | 'island';
+
+/** Goldfish / treasure rings have their own material (fading opacity); free it on removal. */
+function disposeRing(g: THREE.Object3D): void {
+  const ring = g.getObjectByName('ring') as THREE.Mesh | undefined;
+  (ring?.material as THREE.Material | undefined)?.dispose();
+}
 
 export class WorldRenderer {
   readonly renderer: THREE.WebGLRenderer;
@@ -237,6 +243,9 @@ export class WorldRenderer {
     u.uActiveInner.value = band.inner;
     u.uActiveOuter.value = band.outer;
     u.uIslandR.value = ISLAND_RADIUS;
+    const ev = this.world.seaEvent;
+    if (ev) (u.uEventTint.value as THREE.Color).setHex(ev.kind === 'goldenHour' ? 0xffc928 : 0x6fffe0);
+    u.uEventAmt.value += ((ev ? 1 : 0) - u.uEventAmt.value) * Math.min(1, dt * 2);
     u.uZoneW.value = ZONE_WIDTH;
 
     this.syncCosmetics();
@@ -352,7 +361,7 @@ export class WorldRenderer {
         fish.name = 'fish';
         m.add(fish);
         const ring = new THREE.Mesh(
-          new THREE.RingGeometry(1.2, 1.6, 20),
+          shared(new THREE.RingGeometry(1.2, 1.6, 20)),
           new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.8, depthWrite: false }),
         );
         ring.rotation.x = -Math.PI / 2;
@@ -377,6 +386,7 @@ export class WorldRenderer {
       if (!alive.has(id)) {
         this.goldMeshes.delete(id);
         this.scene.remove(m);
+        disposeRing(m);
       }
     }
   }
@@ -392,7 +402,7 @@ export class WorldRenderer {
         obj.name = 'obj';
         m.add(obj);
         const ring = new THREE.Mesh(
-          new THREE.RingGeometry(1.4, 1.8, 24),
+          shared(new THREE.RingGeometry(1.4, 1.8, 24)),
           new THREE.MeshBasicMaterial({ color: 0xfff1a8, transparent: true, opacity: 0.8, depthWrite: false }),
         );
         ring.rotation.x = -Math.PI / 2;
@@ -414,6 +424,7 @@ export class WorldRenderer {
       if (!alive.has(id)) {
         this.treasureMeshes.delete(id);
         this.scene.remove(m);
+        disposeRing(m);
       }
     }
   }
@@ -507,7 +518,8 @@ export class WorldRenderer {
   splash(x: number, z: number, count: number, color: number, size = 1): void {
     for (let i = 0; i < count; i++) {
       if (this.particles.length > 220) break;
-      const p = new THREE.Mesh(new THREE.TetrahedronGeometry(0.14 * size, 0), flat(color));
+      const p = new THREE.Mesh(shared(new THREE.TetrahedronGeometry(0.14, 0)), flat(color));
+      p.scale.setScalar(size);
       p.position.set(x + (Math.random() - 0.5) * 0.8, 0.1, z + (Math.random() - 0.5) * 0.8);
       const a = Math.random() * Math.PI * 2;
       const sp = 1.5 + Math.random() * 2.5;
@@ -525,7 +537,6 @@ export class WorldRenderer {
     }
     for (const p of this.particles.filter((o) => o.life <= 0 || o.mesh.position.y < -0.5)) {
       this.scene.remove(p.mesh);
-      p.mesh.geometry.dispose();
     }
     this.particles = this.particles.filter((o) => o.life > 0 && o.mesh.position.y >= -0.5);
   }

@@ -409,7 +409,7 @@ export class PanelManager {
         icon: '📖',
         title: () => 'Marine Atlas',
         subtitle: () => 'Every fish you have caught',
-        key: () => `${this.atlasLevel}-${Object.keys(s().atlas).length}`,
+        key: () => `${this.atlasLevel}-${Object.keys(s().atlas).length}-${s().atlasSets.length}`,
         build: (body) => {
           const st = s();
           const seg = h('div', { class: 'seg' });
@@ -421,6 +421,27 @@ export class PanelManager {
           const species = ALL_SPECIES.filter((sp) => sp.level === this.atlasLevel);
           const caught = species.filter((sp) => st.atlas[sp.id]).length;
           body.append(h('div', { class: 'summary' }, h('span', null, themeFor(this.atlasLevel).name), h('span', null, 'Discovered ', h('b', null, `${caught}/${species.length}`))));
+          const setNames: Record<string, string> = { common: 'Common fish', rare: 'Rare fish', endangered: 'Endangered fish', legendary: 'Legendary fish', special: 'Bosses & golden koi' };
+          const sets = h('div', { class: 'atlas-sets' });
+          for (const set of game.atlasSets(this.atlasLevel)) {
+            const done = set.have === set.total;
+            const action = set.claimed
+              ? h('span', { class: 'owned' }, '✓ +2%')
+              : pressButton({ class: `btn gold small${done ? ' pulse' : ''}`, disabled: !done }, () => {
+                if (game.claimAtlasSet(this.atlasLevel, set.group)) {
+                  this.host.sfx('buy');
+                  this.host.reward(`📖 Set complete! +${set.rubies} rubies · +2% gold forever`);
+                }
+              }, `${set.rubies} `, ruby());
+            sets.append(h('div', { class: 'set-row' },
+              h('i', { class: `tag rar-${set.group === 'special' ? 'mythical' : set.group}` }),
+              h('span', null, setNames[set.group]),
+              h('div', { class: 'progress' }, h('div', { class: 'fill', style: `width:${(set.have / set.total) * 100}%` })),
+              h('small', null, `${set.have}/${set.total}`),
+              action,
+            ));
+          }
+          body.append(sets, h('p', { class: 'note', style: 'margin:0 0 8px' }, `Complete a set: rubies + 2% more gold forever. Atlas bonus now ×${game.atlasBonus.toFixed(2)}`));
           const grid = h('div', { class: 'atlas-grid' });
           for (const sp of species) {
             const n = st.atlas[sp.id] ?? 0;

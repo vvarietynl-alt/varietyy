@@ -25,6 +25,8 @@ export function createOcean(size: number, segments: number): { mesh: THREE.Mesh;
       uUnlockedR: { value: 24 },
       uActiveInner: { value: 14 },
       uActiveOuter: { value: 24 },
+      uEventTint: { value: new THREE.Color(0xffd23f) },
+      uEventAmt: { value: 0 },
     },
     vertexShader: /* glsl */ `
       uniform float uTime;
@@ -52,6 +54,8 @@ export function createOcean(size: number, segments: number): { mesh: THREE.Mesh;
       uniform float uUnlockedR;
       uniform float uActiveInner;
       uniform float uActiveOuter;
+      uniform vec3 uEventTint;
+      uniform float uEventAmt;
       varying vec3 vWorld;
 
       void main() {
@@ -84,6 +88,12 @@ export function createOcean(size: number, segments: number): { mesh: THREE.Mesh;
           float ang = atan(vWorld.z, vWorld.x);
           float dash = step(0.45, fract(ang * r * 0.09));
           col = mix(col, vec3(1.0), line * dash * 0.45);
+        }
+
+        // sea event: tinted, sparkling water
+        if (uEventAmt > 0.0) {
+          float sparkle = pow(max(0.0, sin(vWorld.x * 1.7 + uTime * 3.0) * sin(vWorld.z * 1.3 - uTime * 2.4)), 12.0);
+          col = mix(col, uEventTint, uEventAmt * 0.32) + uEventTint * sparkle * uEventAmt * 0.8;
         }
 
         // active zone slightly brighter
