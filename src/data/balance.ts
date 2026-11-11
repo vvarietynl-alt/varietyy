@@ -120,18 +120,20 @@ export const ZONE_PRICES: number[][] = [
  * ones or for the first zone of a new level).
  *
  * Every level continues from the price you paid to sail there (its entry):
- *   zone 2 = entry × ZONE_PRICE_START, every next zone × the level's growth,
+ *   zone 2 = entry × the level's start factor, every next zone × 1.6,
  *   sailing on = the same price as zone 9 (after the last boss there is
  *   nothing new to wait for, so this step must not be the long one).
  * Fish are worth ~×15 more in a new level, so its first zones open quickly;
- * the growth per level sets how long the level takes. Tuned with
+ * the start factor per level sets how long the level takes. Tuned with
  * `npm run sim` to level 1 ≈16 min (a fast first impression), then 20, 30,
  * 40, 55, 75, 85, 100, 115 and 125 min — ≈11 h for the first voyage —
  * while the longest wait for a new zone stays short.
  */
 export const FIRST_LEVEL_ENTRY = 1500;
-export const ZONE_PRICE_START = 0.3;
-export const LEVEL_ZONE_GROWTH: number[] = JSON.parse(globalThis.process?.env?.WH_LZG ?? '[1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5]');
+/** Every zone costs ×1.6 more than the one before — about as fast as income grows, so each zone takes about as long. */
+export const ZONE_PRICE_STEP = 1.6;
+/** Zone 2 price as a factor of the level's entry price, per level (sets how long the level takes). */
+export const LEVEL_ZONE_START: number[] = JSON.parse(globalThis.process?.env?.WH_LZS ?? '[0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]');
 /** Extra discount for the very first zones of the game. */
 export const FIRST_LEVEL_ZONE_DISCOUNT = [1, 0.5, 0.7, 0.85, 1, 1, 1, 1];
 /** Fish the player must catch in a zone before the next zone can be bought. */
@@ -392,8 +394,8 @@ export const DAILY_REWARDS: DailyReward[] = [
 // `npm run sim -- --voyages 14`.
 export const ENDLESS_GOLD_GROWTH = 4;
 export const ENDLESS_HP_GROWTH = 1.75;
-/** Zone price growth after level 10: a level then costs ~25× the one before while fish are worth ×4. */
-export const ENDLESS_ZONE_GROWTH = 1.69;
+/** Zone 2 factor after level 10: a level then costs ~25× the one before (0.95 × 1.6^7) while fish are worth ×4. */
+export const ENDLESS_ZONE_START = 0.95;
 
 export function levelBaseGold(level: number): number {
   if (level <= LEVEL_COUNT) return LEVEL_BASE_GOLD[level - 1];
@@ -405,16 +407,15 @@ export function levelBaseHp(level: number): number {
   return LEVEL_BASE_HP[LEVEL_COUNT - 1] * Math.pow(ENDLESS_HP_GROWTH, level - LEVEL_COUNT);
 }
 
-export function levelZoneGrowth(level: number): number {
-  return level <= LEVEL_COUNT ? LEVEL_ZONE_GROWTH[level - 1] : ENDLESS_ZONE_GROWTH;
+export function levelZoneStart(level: number): number {
+  return level <= LEVEL_COUNT ? LEVEL_ZONE_START[level - 1] : ENDLESS_ZONE_START;
 }
 
 const entryCache: number[] = [0, FIRST_LEVEL_ENTRY];
-/** Price paid to sail to a level (level 1: the base all prices grow from). */
+/** Price paid to sail to a level (level 1: the base all prices grow from). Equals zone 9 of the level before. */
 export function levelEntryPrice(level: number): number {
   for (let l = entryCache.length; l <= level; l++) {
-    const g = levelZoneGrowth(l - 1);
-    entryCache[l] = entryCache[l - 1] * ZONE_PRICE_START * Math.pow(g, 7);
+    entryCache[l] = entryCache[l - 1] * levelZoneStart(l - 1) * Math.pow(ZONE_PRICE_STEP, 7);
   }
   return entryCache[level];
 }
@@ -424,7 +425,7 @@ export function zoneBasePrice(level: number, ordinal: number): number {
   const entry = levelEntryPrice(level);
   if (ordinal === 0) return entry;
   const discount = level === 1 ? FIRST_LEVEL_ZONE_DISCOUNT[ordinal] : 1;
-  return entry * ZONE_PRICE_START * Math.pow(levelZoneGrowth(level), ordinal - 1) * discount;
+  return entry * levelZoneStart(level) * Math.pow(ZONE_PRICE_STEP, ordinal - 1) * discount;
 }
 
 /** Safety limit: beyond this the numbers would overflow. */
