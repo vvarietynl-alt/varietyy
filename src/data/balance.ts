@@ -444,7 +444,7 @@ export const PRESTIGE_MIN_LEVEL = 3;
  * voyages stop getting further (checked with `npm run sim -- --voyages 12`).
  */
 export const PEARL_SCALE = 10;
-export const PEARL_LEVEL_GROWTH = 3;
+export const PEARL_LEVEL_GROWTH = 3.3;
 /** Every pearl ever earned: +2% gold from all fish, permanently. */
 export const PEARL_INCOME_BONUS = 0.02;
 

@@ -67,8 +67,14 @@ Na een aanpassing: `npm run sim` om het effect op de speeltijd te zien.
 | Geen boss-HP, geen goud per zeldzaamheid, geen goudvis-beloning | Toegevoegd |
 | Zones kostten maar een paar vissen | Prijsfactor per level, afgesteld met de simulatie |
 
-Resultaat van de simulatie (constant actief spelen, slimme aankopen): level 1 ≈ 30 min, oplopend tot ≈ 3,5 uur voor level 10,
-≈ 15 uur actief spelen in totaal. Met offline inkomsten erbij speelt een gemiddelde speler weken. De vloot levert 40–55% van het inkomen.
+Resultaat van de simulatie (rekent ook kisten, missies, evenementen en Lucky catches mee, en komt overeen met de speeltest):
+level 1 ≈ 14 min (snelle eerste indruk), daarna 20, 29, 39, 50, 60, 64, 70, 75 en 80 min — ≈ 8,4 uur actief spelen voor de
+eerste reis, plus de tijd dat de vloot offline doorvist. **Langste wachttijd op een nieuwe zone**: 4–7 min in level 1–4,
+15–21 min in level 5–10 (zee-evenementen elke 3–5 min, kisten elke ±2 min en missies vullen die tijd).
+
+Prijsmodel: elk level begint bij de prijs die je betaalde om erheen te varen; zone 2 = 30% daarvan, elke volgende zone een
+vaste factor duurder (afgesteld per level), het volgende level kost evenveel als zone 9. Zo springt de prijs nergens weg
+van je inkomen.
 
 ## Eindeloos spelen
 
@@ -77,8 +83,8 @@ Resultaat van de simulatie (constant actief spelen, slimme aankopen): level 1 �
 - **Nieuwe Reis (prestige)** bij de vuurtoren, vanaf level 3: terug naar level 1 voor **parels**. Elke ooit verdiende parel geeft
   permanent +2% goud. Hoe verder je komt (level + zone), hoe meer parels.
 - **Parelwinkel**: Master Angler, Bigger Nets, Head Start, Long Breath, Lucky Charm, Deep Pockets, Pearl Diver.
-- Simulatie: `npm run sim -- --voyages 14` — elke reis komt ±10 levels verder dan de vorige, reizen duren geleidelijk langer
-  (3 → 20 uur actief). De getallen blijven tot ongeveer level 200 binnen wat JavaScript aankan; daarboven stopt de game veilig.
+- Simulatie: `npm run sim -- --voyages 12` — elke reis komt 5–8 levels verder dan de vorige (reis 12: level 85), reizen duren
+  geleidelijk langer (2 → 11 uur actief). De getallen blijven tot ongeveer level 200 binnen wat JavaScript aankan; daarboven stopt de game veilig.
 
 ## Speelplezier (na speeltest)
 
