@@ -109,19 +109,23 @@ export const ZONE_PRICES: number[][] = [
  * Price factor per level on top of the sheet prices. The sheet priced zones
  * at a few fish each because it ignored fishermen income; with a fleet
  * earning in the background zones need to cost more to still be a goal.
- * Tuned with `npm run sim` to ≈25 min for level 1 growing to ≈3.5 h for
- * level 10 (≈15 h of active play in total, plus offline time).
+ * Tuned with `npm run sim` (which counts chest/mission gold, sea events and
+ * lucky catches, matching the playtest): level 1 ≈16 min (unchanged, a fast
+ * first impression), then 20, 30, 40, 55, 75, 85, 100, 115 and 130 min —
+ * ≈11 h of active play for the first voyage, plus offline time.
  */
 /**
- * Price curve inside every level (by fishing-zone ordinal; ordinal 0 of
- * level N is the price to enter it). The first zones of a level are cheap so
- * a new sea opens up quickly, the last ones cost more. Playtest: without it
- * the first zone of a new level took ~10 minutes and zone 2 of the game 4.5.
+ * Zone prices inside a level: zone 2 costs ZONE_PRICE_START × the level's
+ * entry price, every next zone ×ZONE_PRICE_STEP. The sheet grew ×1.86 per
+ * zone, but income only grows ~×1.4 per zone late in the game, so the last
+ * zones took 25–40 minutes each while the first ones took seconds (measured
+ * with the simulation). ×1.5 keeps a new zone coming every few minutes.
  */
-export const ZONE_PRICE_CURVE = [1, 0.3, 0.45, 0.65, 1, 1.25, 1.5, 1.8];
+export const ZONE_PRICE_START = 0.5;
+export const ZONE_PRICE_STEP = 1.5;
 /** Extra discount for the very first zones of the game. */
 export const FIRST_LEVEL_ZONE_DISCOUNT = [1, 0.5, 0.7, 0.85, 1, 1, 1, 1];
-export const LEVEL_PRICE_MULT: number[] = JSON.parse(globalThis.process?.env?.WH_LPM ?? '[90, 636, 933, 2843, 3976, 4387, 8340, 14020, 10084, 3177]');
+export const LEVEL_PRICE_MULT: number[] = JSON.parse(globalThis.process?.env?.WH_LPM ?? '[90, 2297, 6066, 10430, 13133, 26160, 31446, 28545, 16708, 5975]');
 /** Fish the player must catch in a zone before the next zone can be bought. */
 export function catchesToUnlockNext(zone: number): number {
   return 6 + fishingZoneOrdinal(zone) * 2;
@@ -395,9 +399,12 @@ export function levelBaseHp(level: number): number {
 
 /** Sheet zone price for a level and fishing-zone ordinal, extrapolated after level 10. */
 export function zoneBasePrice(level: number, ordinal: number): number {
-  const curve = ZONE_PRICE_CURVE[ordinal] * (level === 1 ? FIRST_LEVEL_ZONE_DISCOUNT[ordinal] : 1);
-  if (level <= LEVEL_COUNT) return ZONE_PRICES[level - 1][ordinal] * curve;
-  return ZONE_PRICES[LEVEL_COUNT - 1][ordinal] * curve * Math.pow(ENDLESS_PRICE_GROWTH, level - LEVEL_COUNT);
+  const entry = level <= LEVEL_COUNT
+    ? ZONE_PRICES[level - 1][0]
+    : ZONE_PRICES[LEVEL_COUNT - 1][0] * Math.pow(ENDLESS_PRICE_GROWTH, level - LEVEL_COUNT);
+  if (ordinal === 0) return entry;
+  const curve = ZONE_PRICE_START * Math.pow(ZONE_PRICE_STEP, ordinal - 1) * (level === 1 ? FIRST_LEVEL_ZONE_DISCOUNT[ordinal] : 1);
+  return entry * curve;
 }
 
 /** Safety limit: beyond this the numbers would overflow. */

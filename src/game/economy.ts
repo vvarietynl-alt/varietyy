@@ -15,6 +15,7 @@ import {
   levelBaseHp,
   levelPriceMult,
   zoneBasePrice,
+  ZONE_PRICE_STEP,
   FISHERMAN_NAMES,
   FISHERMAN_TIER_COST_GROWTH,
   FISHERMAN_TIER_PROD_GROWTH,
@@ -184,8 +185,9 @@ export function zoneUnlockPrice(level: number, zone: number): number {
   return zoneBasePrice(level, fishingZoneOrdinal(zone)) * levelPriceMult(level);
 }
 
+/** Sailing on costs one zone step more than the last zone of this level, so the rhythm continues. */
 export function nextLevelPrice(level: number): number {
-  return zoneBasePrice(level + 1, 0) * levelPriceMult(level + 1);
+  return zoneUnlockPrice(level, 9) * ZONE_PRICE_STEP * 1.25;
 }
 
 // --- Bosses -----------------------------------------------------------------
