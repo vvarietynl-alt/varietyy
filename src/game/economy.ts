@@ -13,9 +13,8 @@ import {
   FISHERMAN_MILESTONES,
   levelBaseGold,
   levelBaseHp,
-  levelPriceMult,
   zoneBasePrice,
-  ZONE_PRICE_STEP,
+  levelEntryPrice,
   FISHERMAN_NAMES,
   FISHERMAN_TIER_COST_GROWTH,
   FISHERMAN_TIER_PROD_GROWTH,
@@ -182,12 +181,12 @@ export function fleetIncomePerSecond(level: number, unlockedZone: number, fisher
 
 export function zoneUnlockPrice(level: number, zone: number): number {
   if (isBossZone(zone)) return 0;
-  return zoneBasePrice(level, fishingZoneOrdinal(zone)) * levelPriceMult(level);
+  return zoneBasePrice(level, fishingZoneOrdinal(zone));
 }
 
 /** Sailing on costs one zone step more than the last zone of this level, so the rhythm continues. */
 export function nextLevelPrice(level: number): number {
-  return zoneUnlockPrice(level, 9) * ZONE_PRICE_STEP * 1.25;
+  return levelEntryPrice(level + 1);
 }
 
 // --- Bosses -----------------------------------------------------------------
