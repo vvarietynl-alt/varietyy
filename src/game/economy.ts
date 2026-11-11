@@ -10,9 +10,11 @@ import {
   FISHERMAN_BASE_PROD,
   FISHERMAN_HIRE_COST_GROWTH,
   FISHERMAN_MILESTONE_STEP,
+  FISH_HP_GOLD_EXP,
+  FISH_HP_LEVEL_MULT,
+  LEVEL_BASE_HP,
   FISHERMAN_MILESTONES,
   levelBaseGold,
-  levelBaseHp,
   zoneBasePrice,
   levelEntryPrice,
   FISHERMAN_NAMES,
@@ -36,7 +38,6 @@ import {
   UPGRADES,
   type UpgradeId,
   ZONE_GOLD_GROWTH,
-  ZONE_HP_MULT,
 } from '../data/balance';
 
 // --- Fish -------------------------------------------------------------------
@@ -47,9 +48,11 @@ export function fishGold(level: number, zone: number, rarity: CatchableRarity): 
 }
 
 export function fishHp(level: number, zone: number, rarity: CatchableRarity): number {
-  const ord = fishingZoneOrdinal(zone);
-  return levelBaseHp(level) * ZONE_HP_MULT[ord] * RARITY_HP_MULT[rarity];
+  const gold = fishGold(level, zone, 'common');
+  const levelMult = FISH_HP_LEVEL_MULT[Math.min(level, FISH_HP_LEVEL_MULT.length) - 1];
+  return LEVEL_BASE_HP[0] * Math.pow(gold / LEVEL_BASE_GOLD_1, FISH_HP_GOLD_EXP) * levelMult * RARITY_HP_MULT[rarity];
 }
+const LEVEL_BASE_GOLD_1 = 50;
 
 /** Expected gold of one random fish in a zone (spawn-weighted). */
 export function zoneAverageGold(level: number, zone: number): number {
@@ -194,7 +197,7 @@ export function nextLevelPrice(level: number): number {
 export function bossHp(level: number, bossIndex: number): number {
   const zoneInFront = bossIndex === 0 ? 4 : 9;
   const levelFactor = 1 + BOSS_LEVEL_HP_GROWTH * (Math.min(level, 10) - 1);
-  return levelBaseHp(level) * ZONE_HP_MULT[fishingZoneOrdinal(zoneInFront)] * BOSS_HP_MULT[bossIndex] * levelFactor;
+  return fishHp(level, zoneInFront, 'common') * BOSS_HP_MULT[bossIndex] * levelFactor;
 }
 
 export function bossGold(level: number, bossIndex: number): number {

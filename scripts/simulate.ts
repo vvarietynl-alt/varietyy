@@ -159,7 +159,8 @@ function playVoyage(endless: boolean): void {
         if (!endless) {
           console.log(
             `${String(s.level).padStart(5)} | ${formatDuration(t - levelStart).padEnd(9)} | ${formatDuration(t).padEnd(10)} | ${((fleetGold / (fleetGold + activeGold)) * 100).toFixed(0).padStart(10)}% | ${String(s.fishermen.reduce((a, b) => a + b, 0)).padStart(5)} (tier ${top + 1}: ${s.fishermen[top] ?? 0})`.padEnd(70) +
-              ` | ${s.upgrades.skill}/${s.upgrades.speed}/${s.upgrades.autoGear} | longest wait ${formatDuration(Math.max(longestWait, t - zoneStart))}`,
+              ` | ${s.upgrades.skill}/${s.upgrades.speed}/${s.upgrades.autoGear} | longest wait ${formatDuration(Math.max(longestWait, t - zoneStart))}` +
+              ` | taps/fish z1 ${(fishHp(s.level, 1, 'common') / (tapDamage(s.upgrades) * game.tapDamageMult)).toFixed(1)} z9 ${(fishHp(s.level, 9, 'common') / (tapDamage(s.upgrades) * game.tapDamageMult)).toFixed(1)}`,
           );
         }
         longestWait = 0;

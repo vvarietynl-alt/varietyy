@@ -79,6 +79,16 @@ export const RARITY_GOLD_MULT: Record<CatchableRarity, number> = {
 // level-1 curve used here always rises outward.
 // ---------------------------------------------------------------------------
 export const LEVEL_BASE_HP = [15, 54, 104, 194, 378, 709, 1275, 2297, 4132, 7438];
+/**
+ * FIX (playtest: "one tap and the fish is caught"): the sheet's HP grew ~×2
+ * per level while fish value grows ~×15, so tap damage (bought with gold)
+ * soon one-shot everything. Fish stamina now follows fish value:
+ * HP = 15 × (gold / 50) ^ FISH_HP_GOLD_EXP — about as fast as damage grows
+ * when you spend your gold on upgrades, so fish keep taking a few taps.
+ */
+export const FISH_HP_GOLD_EXP = 0.62;
+/** Per-level stamina factor, tuned so a common fish in your furthest zone takes ~6 taps. */
+export const FISH_HP_LEVEL_MULT = [1, 2.6, 2.4, 1.28, 0.67, 0.35, 0.14, 0.073, 0.038, 0.025];
 /** HP multiplier for fishing zones 1,2,3,4,6,7,8,9 (ordinal 0–7). */
 export const ZONE_HP_MULT = [1, 2, 2.71, 3.24, 3.59, 3.85, 4.03, 4.17];
 export const RARITY_HP_MULT: Record<CatchableRarity, number> = {
@@ -165,8 +175,9 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
     building: 'fishingWorkshop',
     description: 'Damage of every tap ×1.2',
     maxLevel: 1000,
-    baseCost: 100, // sheet: 100 ×1.5
-    costGrowth: 1.5,
+    baseCost: 100, // sheet: 100 ×1.5 (growth raised, see below)
+    // FIX: was ×1.5 — damage got so cheap that every fish died in one tap
+    costGrowth: 1.8,
   },
   speed: {
     id: 'speed',
@@ -175,9 +186,10 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
     description: '+0.5 hits per tap',
     maxLevel: 60,
     baseCost: 1000,
-    // FIX: sheet doubled the price per level for a linear +0.5 bonus, which
-    // made it worthless after ~level 20 and unaffordable after level 65.
-    costGrowth: 1.62,
+    // Sheet: ×2 per level. Lowered to 1.62 at first, raised again to 1.95
+    // after the playtest showed fish dying in one tap (with value-based fish
+    // stamina and level factors this keeps a common fish at ~6 taps).
+    costGrowth: 1.95,
   },
   autoGear: {
     id: 'autoGear',
