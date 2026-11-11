@@ -125,13 +125,14 @@ export const ZONE_PRICES: number[][] = [
  *   nothing new to wait for, so this step must not be the long one).
  * Fish are worth ~×15 more in a new level, so its first zones open quickly;
  * the growth per level sets how long the level takes. Tuned with
- * `npm run sim` to level 1 ≈16 min (a fast first impression), then 20, 30,
- * 40, 55, 75, 85, 100, 115 and 125 min — ≈11 h for the first voyage —
- * while the longest wait for a new zone stays short.
+ * `npm run sim` to level 1 ≈15 min (a fast first impression), then 20, 30,
+ * 40, 50, 60, 65, 70, 75 and 80 min — ≈8 h of active play for the first
+ * voyage (plus offline time) — with the longest wait for a new zone at
+ * ~4–7 min in levels 1–4 and ~15–20 min in levels 5–10.
  */
 export const FIRST_LEVEL_ENTRY = 1500;
 export const ZONE_PRICE_START = 0.3;
-export const LEVEL_ZONE_GROWTH: number[] = JSON.parse(globalThis.process?.env?.WH_LZG ?? '[1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5]');
+export const LEVEL_ZONE_GROWTH = [3.2897, 3.259, 2.6191, 2.6861, 2.6472, 2.3963, 2.5535, 2.33, 1.9376, 2.0559];
 /** Extra discount for the very first zones of the game. */
 export const FIRST_LEVEL_ZONE_DISCOUNT = [1, 0.5, 0.7, 0.85, 1, 1, 1, 1];
 /** Fish the player must catch in a zone before the next zone can be bought. */
@@ -392,8 +393,8 @@ export const DAILY_REWARDS: DailyReward[] = [
 // `npm run sim -- --voyages 14`.
 export const ENDLESS_GOLD_GROWTH = 4;
 export const ENDLESS_HP_GROWTH = 1.75;
-/** Zone price growth after level 10: a level then costs ~25× the one before while fish are worth ×4. */
-export const ENDLESS_ZONE_GROWTH = 1.69;
+/** Zone price growth after level 10: a level then costs ~25× the one before (0.3 × 1.88^7) while fish are worth ×4. */
+export const ENDLESS_ZONE_GROWTH = 1.88;
 
 export function levelBaseGold(level: number): number {
   if (level <= LEVEL_COUNT) return LEVEL_BASE_GOLD[level - 1];
@@ -530,9 +531,9 @@ export const SEA_EVENTS: Record<SeaEventKind, SeaEventDef> = {
   school: { kind: 'school', name: 'Fish Frenzy', description: '×2 gold', seconds: 30, icon: '🐟' },
   goldenHour: { kind: 'goldenHour', name: 'Golden Hour', description: 'koi everywhere', seconds: 20, icon: '🌅' },
 };
-/** First event after this many seconds of play, then every 4–7 minutes. */
+/** First event after this many seconds of play, then every 3–5 minutes (fills the longer waits later in the game). */
 export const SEA_EVENT_FIRST = 90;
-export const SEA_EVENT_INTERVAL = [240, 420] as const;
+export const SEA_EVENT_INTERVAL = [180, 300] as const;
 export const SCHOOL_FISH = 13;
 export const SCHOOL_GOLD_MULT = 2;
 export const GOLDEN_HOUR_GOLDFISH_PER_MINUTE = 9;
