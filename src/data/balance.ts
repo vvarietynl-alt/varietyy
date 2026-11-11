@@ -121,7 +121,7 @@ export const ZONE_PRICES: number[][] = [
  *
  * Every level continues from the price you paid to sail there (its entry):
  *   zone 2 = entry × ZONE_PRICE_START, every next zone × the level's growth,
- *   sailing on = one step more than zone 9 (× 1.25).
+ *   sailing on = one step more than zone 9.
  * Fish are worth ~×15 more in a new level, so its first zones open quickly;
  * the growth per level sets how long the level takes. Tuned with
  * `npm run sim` to level 1 ≈16 min (a fast first impression), then 20, 30,
@@ -413,7 +413,7 @@ const entryCache: number[] = [0, FIRST_LEVEL_ENTRY];
 export function levelEntryPrice(level: number): number {
   for (let l = entryCache.length; l <= level; l++) {
     const g = levelZoneGrowth(l - 1);
-    entryCache[l] = entryCache[l - 1] * ZONE_PRICE_START * Math.pow(g, 8) * 1.25;
+    entryCache[l] = entryCache[l - 1] * ZONE_PRICE_START * Math.pow(g, 8);
   }
   return entryCache[level];
 }
