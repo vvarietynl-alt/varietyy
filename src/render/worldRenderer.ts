@@ -7,7 +7,8 @@ import type { Game } from '../game/game';
 import type { Fleet } from '../game/fleet';
 import { FleetRenderer } from './fleet';
 import { BOAT_SKINS, type DecorId } from '../data/balance';
-import { type BoatModel, type BuildingId, createBoat, createBottle, createDecor, createFish, createIsland, createRock, createTreasureChest, flat, shared } from './models';
+import { Effects } from './effects';
+import { type BoatModel, type BuildingId, createBlobShadow, createBoat, createBottle, createDecor, createGull, createFish, createIsland, createRock, createTreasureChest, flat, shared } from './models';
 import { createOcean } from './ocean';
 
 const RARITY_SIZE: Record<CatchableRarity, number> = { common: 0.85, rare: 1.0, endangered: 1.15, legendary: 1.4 };
@@ -22,13 +23,26 @@ interface Jumper {
   spin: number;
 }
 
-interface Particle {
-  mesh: THREE.Mesh;
-  vel: THREE.Vector3;
-  life: number;
-}
 
 export type CameraMode = 'sea' | 'island';
+
+/** Soft vertical sky gradient (lighter towards the top). */
+function skyGradient(color: number): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 128;
+  const ctx = c.getContext('2d')!;
+  const base = new THREE.Color(color);
+  const top = base.clone().lerp(new THREE.Color(0xffffff), 0.45);
+  const g = ctx.createLinearGradient(0, 0, 0, 128);
+  g.addColorStop(0, `#${top.getHexString()}`);
+  g.addColorStop(1, `#${base.getHexString()}`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 128);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 
 /** Goldfish / treasure rings have their own material (fading opacity); free it on removal. */
 function disposeRing(g: THREE.Object3D): void {
@@ -43,6 +57,11 @@ export class WorldRenderer {
   private ocean: ReturnType<typeof createOcean>;
   private floor: THREE.Mesh;
   private boat: BoatModel;
+  readonly effects: Effects;
+  private sun: THREE.DirectionalLight;
+  private boatShadow: THREE.Mesh;
+  private gulls: THREE.Group[] = [];
+  private smokeTimer = 0;
   private boatSkin = '';
   private decor = new THREE.Group();
   private decorKey = '';
@@ -54,7 +73,6 @@ export class WorldRenderer {
   private bossMesh: THREE.Group | null = null;
   private bossKey = '';
   private jumpers: Jumper[] = [];
-  private particles: Particle[] = [];
   private line: THREE.Line;
   private targetRing: THREE.Mesh;
   private nextArrow: THREE.Mesh;
@@ -72,12 +90,26 @@ export class WorldRenderer {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 400);
 
-    this.scene.add(new THREE.HemisphereLight(0xdff6ff, 0x3b6e8f, 1.4));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.9);
-    sun.position.set(30, 60, 20);
-    this.scene.add(sun);
+    // warm sun + cool sky light; the sun casts soft shadows on the island
+    this.scene.add(new THREE.HemisphereLight(0xd8f1ff, 0x2f6d8f, 1.25));
+    this.sun = new THREE.DirectionalLight(0xfff0d6, 2.6);
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(1024, 1024);
+    const sc = this.sun.shadow.camera;
+    sc.left = sc.bottom = -26;
+    sc.right = sc.top = 26;
+    sc.near = 10;
+    sc.far = 140;
+    this.sun.shadow.bias = -0.0008;
+    this.sun.shadow.normalBias = 0.03;
+    this.scene.add(this.sun, this.sun.target);
+    this.effects = new Effects(this.scene);
 
     this.floor = new THREE.Mesh(new THREE.CircleGeometry(220, 40), new THREE.MeshBasicMaterial({ color: 0x0d4f8a }));
     this.floor.rotation.x = -Math.PI / 2;
@@ -90,6 +122,12 @@ export class WorldRenderer {
     const isl = createIsland(ISLAND_RADIUS);
     this.island = isl.group;
     this.buildings = isl.buildings;
+    this.island.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+    });
     this.scene.add(this.island);
 
     // scattered rocks in the sea for depth cues
@@ -105,9 +143,21 @@ export class WorldRenderer {
 
     this.boat = createBoat();
     this.scene.add(this.boat.group);
+    this.boatShadow = createBlobShadow(4.6, 2.6);
+    this.scene.add(this.boatShadow);
     this.scene.add(this.decor);
 
-    this.fleetRenderer = new FleetRenderer(this.scene, fleet, game, (x, z) => this.waveHeight(x, z), (x, z, n, c, sz) => this.splash(x, z, n, c, sz));
+    this.fleetRenderer = new FleetRenderer(this.scene, fleet, game, (x, z) => this.waveHeight(x, z), this.effects);
+
+    for (let i = 0; i < 5; i++) {
+      const gull = createGull();
+      gull.userData.angle = i * 1.3;
+      gull.userData.radius = 9 + (i % 3) * 4;
+      gull.userData.height = 8 + (i % 2) * 2.5;
+      gull.userData.speed = 0.25 + (i % 3) * 0.08;
+      this.gulls.push(gull);
+      this.scene.add(gull);
+    }
 
     this.line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
@@ -138,29 +188,41 @@ export class WorldRenderer {
         case 'caught':
           this.startJump(e.fish);
           break;
-        case 'hit':
-          this.splash(e.x, e.z, 4, 0xffffff);
+        case 'hit': {
+          this.effects.splash(e.x, e.z, e.crit ? 7 : 3, 0xffffff, e.crit ? 0.9 : 0.6);
+          if (e.crit) this.effects.sparkle(e.x, 0.6, e.z, 0xffb347, 6, 1);
+          const t = this.world.target;
+          const m = t ? this.fishMeshes.get(t.id) : undefined;
+          if (m) m.userData.squash = 1;
           break;
+        }
         case 'hooked':
-          this.splash(e.fish.x, e.fish.z, 10, 0xffffff);
+          this.effects.splash(e.fish.x, e.fish.z, 12, 0xffffff, 1);
           break;
         case 'goldfish-collected':
-          this.splash(e.goldfish.x, e.goldfish.z, 18, 0xffd23f);
+          this.effects.splash(e.goldfish.x, e.goldfish.z, 10, 0xffffff, 1);
+          this.effects.burst(e.goldfish.x, 0.8, e.goldfish.z, 0xffd23f, 36, 6);
           break;
         case 'treasure-opened':
-          this.splash(e.treasure.x, e.treasure.z, 26, 0xffd23f, 1.2);
+          this.effects.splash(e.treasure.x, e.treasure.z, 12, 0xffffff, 1.1);
+          this.effects.burst(e.treasure.x, 0.8, e.treasure.z, 0xffd23f, 50, 7);
           this.shake = 0.25;
           break;
         case 'frenzy-start':
           this.shake = 0.3;
-          this.splash(this.world.boat.x, this.world.boat.z, 30, 0xff8a3d, 1.1);
+          this.effects.burst(this.world.boat.x, 1, this.world.boat.z, 0xff8a3d, 50, 7);
           break;
         case 'boss-mini-hit':
           if (e.hit) this.shake = 0.35;
           break;
         case 'boss-won':
           this.shake = 0.8;
-          if (this.bossMesh) this.splash(this.bossMesh.position.x, this.bossMesh.position.z, 40, 0xffffff);
+          if (this.bossMesh) {
+            const p = this.bossMesh.position;
+            this.effects.splash(p.x, p.z, 40, 0xffffff, 1.8);
+            this.effects.burst(p.x, 1.5, p.z, 0xffd23f, 80, 10);
+            this.effects.ripple(p.x, p.z, 9);
+          }
           break;
         case 'zone-reset':
           this.clearEntities();
@@ -179,6 +241,7 @@ export class WorldRenderer {
     // keep a similar horizontal view on narrow phones
     this.camera.fov = w / h < 0.7 ? 58 : 48;
     this.camera.updateProjectionMatrix();
+    this.effects?.setViewportHeight(h);
   }
 
   screenToWorld(clientX: number, clientY: number): { x: number; z: number } | null {
@@ -226,7 +289,7 @@ export class WorldRenderer {
     (u.uShallow.value as THREE.Color).setHex(theme.shallow);
     (u.uDeep.value as THREE.Color).setHex(theme.deep);
     (u.uSky.value as THREE.Color).setHex(theme.sky);
-    this.scene.background = new THREE.Color(theme.sky);
+    this.scene.background = skyGradient(theme.sky);
     (this.floor.material as THREE.MeshBasicMaterial).color.setHex(theme.deep).multiplyScalar(0.55);
     this.clearEntities();
   }
@@ -258,8 +321,12 @@ export class WorldRenderer {
     this.syncBoss(dt);
     this.updateMarkers();
     this.updateJumpers(dt);
-    this.updateParticles(dt);
+    this.updateGulls(dt);
+    this.effects.update(dt, (x, z) => this.waveHeight(x, z));
     this.updateCamera(dt);
+    // the sun's shadow box follows what the camera looks at
+    this.sun.position.set(this.camTarget.x + 30, 60, this.camTarget.z + 20);
+    this.sun.target.position.copy(this.camTarget);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -273,7 +340,8 @@ export class WorldRenderer {
       this.boatSkin = boatKey;
       this.scene.remove(this.boat.group);
       this.boat = createBoat(BOAT_SKINS[c.boatSkin] ?? BOAT_SKINS.classic, tier);
-      if (upgraded) this.splash(this.world.boat.x, this.world.boat.z, 24, 0xffd23f);
+      this.boat.group.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
+      if (upgraded) this.effects.burst(this.world.boat.x, 1, this.world.boat.z, 0xffd23f, 40, 6);
       this.scene.add(this.boat.group);
     }
     const key = c.decor.join();
@@ -289,6 +357,7 @@ export class WorldRenderer {
       };
       for (const id of c.decor) {
         const d = createDecor(id);
+        d.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         const [x, y, z] = spots[id];
         d.position.set(x, y, z);
         this.decor.add(d);
@@ -319,11 +388,23 @@ export class WorldRenderer {
     g.traverse((o) => {
       if (o.userData.prop) o.rotation.z += dt * (b.moving ? 40 : 6);
       if (o.userData.flame) o.scale.setScalar(b.moving ? 0.8 + Math.random() * 0.6 : 0.3);
+      if (o.userData.wave !== undefined) o.rotation.y = Math.sin(this.time * (b.moving ? 9 : 4)) * 0.35;
     });
-    // a bigger wake the faster the boat goes
-    if (b.moving && Math.random() < dt * 25 * speed) {
-      const back = new THREE.Vector3(-Math.sin(b.heading) * 1.9, 0, -Math.cos(b.heading) * 1.9);
-      this.splash(b.x + back.x + (Math.random() - 0.5) * 0.6, b.z + back.z + (Math.random() - 0.5) * 0.6, 1, 0xffffff, 0.5 + speed * 0.2);
+    this.boatShadow.position.set(b.x, 0.06, b.z);
+    this.boatShadow.rotation.z = -b.heading;
+    // foam trail behind the boat, bigger the faster it goes
+    if (b.moving && Math.random() < dt * 30 * speed) {
+      const bx = b.x - Math.sin(b.heading) * 1.9;
+      const bz = b.z - Math.cos(b.heading) * 1.9;
+      this.effects.wake(bx, bz, 0.8 + speed * 0.25);
+    }
+    // chimney smoke
+    this.smokeTimer -= dt;
+    if (this.smokeTimer <= 0) {
+      this.smokeTimer = b.moving ? 0.18 : 0.45;
+      const p = new THREE.Vector3();
+      this.boat.smokeTip.getWorldPosition(p);
+      this.effects.smoke(p.x, p.y, p.z);
     }
   }
 
@@ -340,18 +421,23 @@ export class WorldRenderer {
         this.scene.add(m);
       }
       const fade = Math.min(1, f.age / 0.8);
-      m.scale.setScalar(m.userData.size * (0.4 + 0.6 * fade));
+      const base = m.userData.size * (0.4 + 0.6 * fade);
+      // squash when hit
+      const sq = Math.max(0, (m.userData.squash ?? 0) as number);
+      m.userData.squash = sq - dt * 7;
+      m.scale.set(base * (1 + 0.22 * sq), base * (1 - 0.18 * sq), base * (1 + 0.08 * sq));
       const hooked = f.state === 'hooked';
       const y = hooked ? -0.2 + Math.sin(f.phase * 9) * 0.12 : FISH_DEPTH + Math.sin(f.phase * 1.5) * 0.08;
       m.position.set(f.x, y, f.z);
       m.rotation.y = f.heading;
       const wiggleSpeed = hooked ? 22 : f.state === 'flee' ? 16 : 7;
       m.traverse((o) => {
-        if (o.userData.tail) o.rotation.y = Math.PI / 4 + Math.sin(f.phase * wiggleSpeed) * 0.5;
+        if (o.userData.tail) o.rotation.y = (o.userData.tailBase ?? 0) + Math.sin(f.phase * wiggleSpeed) * 0.5;
+        if (o.userData.pec) o.rotation.x = Math.sin(f.phase * wiggleSpeed * 0.6) * 0.35;
         if (o.userData.segment !== undefined) o.position.x = Math.sin(f.phase * 4 - o.userData.segment * 0.9) * 0.18;
         if (o.userData.wing) o.rotation.z = o.userData.wing * (0.4 + Math.sin(f.phase * 10) * 0.35);
       });
-      if (hooked && Math.random() < dt * 6) this.splash(f.x, f.z, 1, 0xffffff, 0.5);
+      if (hooked && Math.random() < dt * 8) this.effects.splash(f.x + (Math.random() - 0.5), f.z + (Math.random() - 0.5), 2, 0xffffff, 0.5);
     }
     for (const [id, m] of this.fishMeshes) {
       if (!alive.has(id)) {
@@ -391,6 +477,7 @@ export class WorldRenderer {
       const ring = m.getObjectByName('ring') as THREE.Mesh;
       const pulse = 1 + Math.sin(this.time * 6) * 0.12;
       ring.scale.setScalar(pulse);
+      if (Math.random() < 0.25) this.effects.sparkle(g.x, 1, g.z, 0xffe066, 1, 1.4);
       (ring.material as THREE.MeshBasicMaterial).opacity = Math.min(0.85, g.ttl / 2);
     }
     for (const [id, m] of this.goldMeshes) {
@@ -429,7 +516,7 @@ export class WorldRenderer {
       const ring = m.getObjectByName('ring') as THREE.Mesh;
       ring.scale.setScalar(1 + Math.sin(this.time * 4) * 0.1);
       (ring.material as THREE.MeshBasicMaterial).opacity = Math.min(0.85, t.ttl / 2);
-      if (Math.random() < 0.08) this.splash(t.x + (Math.random() - 0.5), t.z + (Math.random() - 0.5), 1, 0xffe066, 0.6);
+      if (Math.random() < 0.15) this.effects.sparkle(t.x, 0.6, t.z, 0xffe066, 1, 1.6);
     }
     for (const [id, m] of this.treasureMeshes) {
       if (!alive.has(id)) {
@@ -467,7 +554,7 @@ export class WorldRenderer {
         if (o.userData.tail) o.rotation.x = Math.sin(this.time * (fighting ? 9 : 2)) * 0.35;
         if (o.userData.segment !== undefined) o.position.y = Math.sin(this.time * 2.5 - o.userData.segment) * 0.35;
       });
-      if (fighting && Math.random() < dt * 8) this.splash(boss.x + (Math.random() - 0.5) * 4, boss.z + (Math.random() - 0.5) * 4, 2, 0xffffff);
+      if (fighting && Math.random() < dt * 10) this.effects.splash(boss.x + (Math.random() - 0.5) * 5, boss.z + (Math.random() - 0.5) * 5, 4, 0xffffff, 1.2);
     }
   }
 
@@ -507,7 +594,8 @@ export class WorldRenderer {
     const m = this.fishMeshes.get(f.id);
     if (!m) return;
     this.jumpers.push({ obj: m, from: m.position.clone(), t: 0, duration: 0.75, height: 3.2, spin: 2 });
-    this.splash(f.x, f.z, 14, 0xffffff);
+    this.effects.splash(f.x, f.z, 18, 0xffffff, 1.1);
+    if (f.rarity !== 'common') this.effects.burst(f.x, 1, f.z, f.rarity === 'legendary' ? 0xa35cff : f.rarity === 'endangered' ? 0x3cc45a : 0x3fa2ff, 24, 5);
   }
 
   private updateJumpers(dt: number): void {
@@ -526,30 +614,29 @@ export class WorldRenderer {
     this.jumpers = this.jumpers.filter((o) => o.t < 1);
   }
 
+  /** Splash on the water (kept for callers outside the renderer). */
   splash(x: number, z: number, count: number, color: number, size = 1): void {
-    for (let i = 0; i < count; i++) {
-      if (this.particles.length > 220) break;
-      const p = new THREE.Mesh(shared(new THREE.TetrahedronGeometry(0.14, 0)), flat(color));
-      p.scale.setScalar(size);
-      p.position.set(x + (Math.random() - 0.5) * 0.8, 0.1, z + (Math.random() - 0.5) * 0.8);
-      const a = Math.random() * Math.PI * 2;
-      const sp = 1.5 + Math.random() * 2.5;
-      this.particles.push({ mesh: p, vel: new THREE.Vector3(Math.cos(a) * sp, 3 + Math.random() * 4, Math.sin(a) * sp), life: 0.6 + Math.random() * 0.4 });
-      this.scene.add(p);
-    }
+    this.effects.splash(x, z, count, color, size);
   }
 
-  private updateParticles(dt: number): void {
-    for (const p of this.particles) {
-      p.life -= dt;
-      p.vel.y -= 14 * dt;
-      p.mesh.position.addScaledVector(p.vel, dt);
-      p.mesh.rotation.x += dt * 8;
+  /** Small ripple where the player taps the sea. */
+  private lastTapRipple = 0;
+  tapRipple(x: number, z: number): void {
+    // fast tapping would stack dozens of rings; one every 0.35 s is enough
+    if (this.time - this.lastTapRipple < 0.35) return;
+    this.lastTapRipple = this.time;
+    this.effects.ripple(x, z, 1.2);
+  }
+
+  private updateGulls(dt: number): void {
+    for (const g of this.gulls) {
+      const d = g.userData;
+      d.angle += dt * d.speed;
+      g.position.set(this.camTarget.x + Math.sin(d.angle) * d.radius, d.height + Math.sin(this.time * 0.8 + d.angle) * 0.6, this.camTarget.z - 4 + Math.cos(d.angle) * d.radius * 0.7);
+      g.rotation.y = d.angle + Math.PI / 2;
+      g.rotation.z = -0.25;
+      for (const c of g.children) if (c.userData.wing) c.rotation.z = c.userData.wing * Math.sin(this.time * 7 + d.angle * 3) * 0.55;
     }
-    for (const p of this.particles.filter((o) => o.life <= 0 || o.mesh.position.y < -0.5)) {
-      this.scene.remove(p.mesh);
-    }
-    this.particles = this.particles.filter((o) => o.life > 0 && o.mesh.position.y >= -0.5);
   }
 
   private desiredCamPos(): THREE.Vector3 {
@@ -598,7 +685,7 @@ export class WorldRenderer {
     if (species.shape === 'eel' || species.shape === 'serpent') fish.position.x = big ? 1.1 : 1.6;
     scene.add(fish);
     const cam = new THREE.PerspectiveCamera(35, 1, 0.1, 50);
-    cam.position.set(0, 0.6, 6);
+    cam.position.set(0, 0.5, 4.6);
     cam.lookAt(0, 0, 0);
     const size = 128;
     const rt = new THREE.WebGLRenderTarget(size, size);

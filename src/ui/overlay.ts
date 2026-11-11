@@ -112,6 +112,38 @@ export class Overlay {
     this.spawn(h('div', { class: 'float lucky' }, '🍀 LUCKY ×3'), p.x, p.y);
   }
 
+  /** Coins fly from a world position to the gold counter at the top. */
+  coinBurst(x: number, z: number, count = 5): void {
+    const target = document.querySelector('.gold-box .coin') as HTMLElement | null;
+    if (!target || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const from = this.renderer.toScreen(x, 1.2, z);
+    if (!from.visible) return;
+    const to = target.getBoundingClientRect();
+    for (let i = 0; i < count; i++) {
+      const c = h('i', { class: 'coin fly-coin' });
+      const sx = from.x + (Math.random() - 0.5) * 40;
+      const sy = from.y + (Math.random() - 0.5) * 30;
+      c.style.left = `${sx}px`;
+      c.style.top = `${sy}px`;
+      this.root.append(c);
+      const dx = to.left + to.width / 2 - sx;
+      const dy = to.top + to.height / 2 - sy;
+      c.animate(
+        [
+          { transform: 'translate(-50%, -50%) scale(0.6)', opacity: 1 },
+          { transform: `translate(calc(-50% + ${dx * 0.35 + (Math.random() - 0.5) * 60}px), calc(-50% + ${dy * 0.2 - 40}px)) scale(1.15)`, opacity: 1, offset: 0.35 },
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.7)`, opacity: 0.9 },
+        ],
+        { duration: 650 + i * 70, easing: 'cubic-bezier(.4,0,.6,1)' },
+      ).onfinish = () => {
+        c.remove();
+        target.parentElement?.classList.remove('bump');
+        void target.parentElement?.offsetWidth;
+        target.parentElement?.classList.add('bump');
+      };
+    }
+  }
+
   /** Reveal card for a newly discovered (non-common) species. */
   catchCard(name: string, rarity: string, image: string, gold: string): void {
     this.root.querySelector('.catch-card')?.remove();

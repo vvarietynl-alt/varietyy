@@ -56,7 +56,7 @@ export interface GameState {
   lastSeen: number;
   /** First-minutes flags (bitmask): 1 = early rare given, 2 = free fisherman given, 4 = start screen seen. */
   tutorialStep: number;
-  settings: { sound: boolean; haptics: boolean; autoHire: boolean };
+  settings: { sound: boolean; music: boolean; haptics: boolean; autoHire: boolean };
   /** Boost expiry times (epoch ms). */
   boosts: Record<BoostId, number>;
   missions: Mission[];
@@ -110,7 +110,7 @@ export function newGame(now = Date.now()): GameState {
     },
     lastSeen: now,
     tutorialStep: 0,
-    settings: { sound: true, haptics: true, autoHire: true },
+    settings: { sound: true, music: true, haptics: true, autoHire: true },
     boosts: { doubleHaul: 0, strongArms: 0, goldenTide: 0 },
     missions: [],
     daily: { lastClaimDay: null, streak: 0 },

@@ -213,6 +213,9 @@ game.on((e) => {
 
 world.on((e) => {
   switch (e.type) {
+    case 'hooked':
+      sfx('splash');
+      break;
     case 'hit':
       overlay.floatDamage(e.x, e.z, e.damage, e.crit);
       sfx(e.crit ? 'mini' : 'tap');
@@ -241,15 +244,18 @@ world.on((e) => {
       overlay.rewardPop(e.kind === 'school' ? '🐟 FISH FRENZY! ×2 gold' : '🌅 GOLDEN HOUR!');
       break;
     case 'frenzy-start':
-      sfx('win');
+      sfx('frenzy');
       vibrate(60, game.state.settings.haptics);
       overlay.rewardPop('🔥 FRENZY! ×2 damage');
       break;
     case 'caught':
+      sfx('coin');
       overlay.floatGold(e.fish.x, e.fish.z, lastCatchGold);
+      overlay.coinBurst(e.fish.x, e.fish.z, e.fish.rarity === 'common' ? 3 : 6);
       break;
     case 'goldfish-collected':
       overlay.floatGold(e.goldfish.x, e.goldfish.z, e.gold, true);
+      overlay.coinBurst(e.goldfish.x, e.goldfish.z, 10);
       hud.offerDouble('Double the koi gold!', 'double-goldfish', () => {
         game.addGold(e.gold);
         overlay.rewardPop(`×2! +${formatNumber(e.gold)} gold`);
@@ -304,7 +310,10 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
   const p = renderer.screenToWorld(e.clientX, e.clientY);
-  if (p) world.tapAt(p.x, p.z);
+  if (p) {
+    renderer.tapRipple(p.x, p.z);
+    world.tapAt(p.x, p.z);
+  }
   else world.tap();
 });
 window.addEventListener('keydown', (e) => {
@@ -322,24 +331,9 @@ function checkOffline(): void {
 }
 
 document.addEventListener('visibilitychange', () => {
+  audio.setPaused(document.hidden);
   if (document.hidden) save();
   else checkOffline();
-
-// Start screen for brand-new players (also unlocks audio on the first tap).
-if (!(game.state.tutorialStep & 4) && game.state.stats.fishCaught === 0) {
-  const start = h('div', { class: 'start-screen', onpointerdown: (e: Event) => {
-    e.stopPropagation();
-    audio.unlock();
-    game.state.tutorialStep |= 4;
-    analytics.milestone('start_screen_tap');
-    start.classList.add('out');
-    setTimeout(() => start.remove(), 500);
-  } },
-    h('div', { class: 'start-logo' }, h('span', null, '🐋'), h('h1', null, 'Whale Hunter'), h('p', null, 'Build the biggest fishing company of the seven seas')),
-    h('div', { class: 'start-tap' }, 'Tap to start fishing'),
-  );
-  uiRoot.append(start);
-}
 });
 window.addEventListener('pagehide', save);
 setInterval(save, 5000);
@@ -378,11 +372,18 @@ setInterval(() => {
 // --- Main loop ----------------------------------------------------------------------------
 
 /** Developer option for playtests: ?timescale=8 runs the game 8× faster. */
+let musicState = game.state.settings.music;
+audio.setMusic(musicState);
 const timeScale = Math.max(1, Math.min(20, Number(new URLSearchParams(location.search).get('timescale')) || 1));
 let last = performance.now();
 function frame(now: number): void {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+  // music follows the setting (toggled in Settings)
+  if (game.state.settings.music !== musicState) {
+    musicState = game.state.settings.music;
+    audio.setMusic(musicState);
+  }
   for (let i = 0; i < timeScale; i++) {
     game.tick(dt);
     fleet.update(dt);
@@ -399,4 +400,4 @@ function frame(now: number): void {
 requestAnimationFrame(frame);
 
 // Debug helpers for testing in the browser console.
-(window as unknown as Record<string, unknown>).whaleHunter = { game, world, fleet, renderer, save, h };
+(window as unknown as Record<string, unknown>).whaleHunter = { game, world, fleet, renderer, audio, save, h };

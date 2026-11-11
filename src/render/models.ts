@@ -8,8 +8,8 @@ import type { FishShape, LevelTheme } from '../data/fish';
  */
 
 const matCache = new Map<string, THREE.MeshStandardMaterial>();
-export function flat(color: number, opts: { emissive?: number; transparent?: boolean; opacity?: number; metalness?: number; roughness?: number } = {}): THREE.MeshStandardMaterial {
-  const key = `${color}-${opts.emissive ?? 0}-${opts.opacity ?? 1}-${opts.metalness ?? 0}-${opts.roughness ?? 0.85}`;
+export function flat(color: number, opts: { emissive?: number; transparent?: boolean; opacity?: number; metalness?: number; roughness?: number; vertexColors?: boolean; doubleSide?: boolean } = {}): THREE.MeshStandardMaterial {
+  const key = `${color}-${opts.emissive ?? 0}-${opts.opacity ?? 1}-${opts.metalness ?? 0}-${opts.roughness ?? 0.85}-${opts.vertexColors ? 1 : 0}-${opts.doubleSide ? 1 : 0}`;
   let m = matCache.get(key);
   if (!m) {
     m = new THREE.MeshStandardMaterial({
@@ -21,6 +21,8 @@ export function flat(color: number, opts: { emissive?: number; transparent?: boo
       emissiveIntensity: opts.emissive ? 0.6 : 0,
       transparent: opts.transparent ?? false,
       opacity: opts.opacity ?? 1,
+      vertexColors: opts.vertexColors ?? false,
+      side: opts.doubleSide ? THREE.DoubleSide : THREE.FrontSide,
     });
     matCache.set(key, m);
   }
@@ -270,6 +272,8 @@ export interface BoatModel {
   group: THREE.Group;
   rodTip: THREE.Object3D;
   radar: THREE.Object3D;
+  /** Top of the chimney, for smoke puffs. */
+  smokeTip: THREE.Object3D;
 }
 
 export function createBoat(skin: { hull: number; trim: number; roof: number; glow?: number } = { hull: 0xd8392f, trim: 0xfaf6ee, roof: 0xd8392f }, engineTier = 0): BoatModel {
@@ -374,7 +378,37 @@ export function createBoat(skin: { hull: number; trim: number; roof: number; glo
     group.add(spoiler);
   }
 
-  return { group, rodTip, radar };
+  // details: chimney, life ring, railings, bumpers
+  const chimney = mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.55, 6), 0x3a3f4a);
+  chimney.position.set(0.38, 1.82, -0.85);
+  group.add(chimney);
+  const chimneyBand = mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.1, 6), skin.roof);
+  chimneyBand.position.set(0.38, 2.0, -0.85);
+  group.add(chimneyBand);
+  const smokeTip = new THREE.Object3D();
+  smokeTip.position.set(0.38, 2.15, -0.85);
+  group.add(smokeTip);
+  const ring = mesh(new THREE.TorusGeometry(0.2, 0.06, 5, 10), 0xff6b3d);
+  ring.position.set(0.61, 1.0, -0.55);
+  ring.rotation.y = Math.PI / 2;
+  group.add(ring);
+  for (const side of [-1, 1]) {
+    const rail = mesh(new THREE.BoxGeometry(0.04, 0.04, 2.2), 0xe8e2d6);
+    rail.position.set(side * 0.78, 0.92, 0.25);
+    group.add(rail);
+    for (const z of [-0.6, 0.25, 1.1]) {
+      const post = mesh(new THREE.BoxGeometry(0.04, 0.32, 0.04), 0xe8e2d6);
+      post.position.set(side * 0.78, 0.76, z);
+      group.add(post);
+    }
+    const bumper = mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.22, 6), 0x2b2b33);
+    bumper.position.set(side * 0.93, 0.45, -0.1);
+    bumper.rotation.x = Math.PI / 2;
+    group.add(bumper);
+  }
+  flag.userData.wave = 0;
+
+  return { group, rodTip, radar, smokeTip };
 }
 
 // ---------------------------------------------------------------------------
@@ -385,6 +419,45 @@ const DECOR_COLORS: Record<LevelTheme['decor'], number> = {
   none: 0xffffff, glow: 0x9dfff0, wings: 0xffd1f5, bones: 0xfdfbf2, spikes: 0xffb84d,
   ice: 0xdff8ff, horns: 0x3a1f1a, crystal: 0xe6dcff, robot: 0x8c9aa8, stars: 0xfff3a8,
 };
+
+/**
+ * Streamlined fish body (lathe), length along +z (head at +z). Vertex
+ * colours are a light→dark factor: pale belly, darker back. The species
+ * colour comes from the material, so one geometry serves every fish.
+ */
+let fishBodyGeo: THREE.BufferGeometry | null = null;
+function fishBody(): THREE.BufferGeometry {
+  if (fishBodyGeo) return fishBodyGeo;
+  const profile = [
+    [0.0, -1.0], [0.1, -0.92], [0.3, -0.62], [0.46, -0.2], [0.5, 0.12],
+    [0.45, 0.48], [0.32, 0.78], [0.14, 0.96], [0.0, 1.0],
+  ].map(([r, y]) => new THREE.Vector2(r, y));
+  const geo = new THREE.LatheGeometry(profile, 9).toNonIndexed();
+  geo.rotateX(Math.PI / 2); // lathe axis (y) → length (z)
+  const pos = geo.getAttribute('position');
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 0.5; // -1 belly … +1 back
+    const f = y < 0 ? 1.0 + -y * 0.75 : 1.0 - y * 0.42;
+    colors.set([f, f, f], i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+  fishBodyGeo = geo;
+  return geo;
+}
+
+/** A flat fin from a 2D outline (x = along the body, negative = backwards; y = up). */
+function finGeo(points: [number, number][], name: string): THREE.BufferGeometry {
+  const key = `fin-${name}`;
+  const hit = geoCache.get(key);
+  if (hit) return hit;
+  const shape = new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y)));
+  const geo = new THREE.ShapeGeometry(shape);
+  geo.rotateY(-Math.PI / 2); // shape x → body z
+  geoCache.set(key, geo);
+  return geo;
+}
 
 export function createFish(color: number, shape: FishShape, decor: LevelTheme['decor'], size = 1): THREE.Group {
   const g = new THREE.Group();
@@ -401,6 +474,7 @@ export function createFish(color: number, shape: FishShape, decor: LevelTheme['d
     tail.scale.set(0.25, 1, 1);
     tail.position.z = z;
     tail.userData.tail = true;
+    tail.userData.tailBase = Math.PI / 4;
     body.add(tail);
   };
 
@@ -460,25 +534,51 @@ export function createFish(color: number, shape: FishShape, decor: LevelTheme['d
     }
     default: {
       const dims: Record<string, [number, number, number]> = {
-        slim: [0.42, 0.5, 1.2],
-        round: [0.5, 0.68, 1],
-        flat: [0.75, 0.3, 0.95],
-        shark: [0.45, 0.5, 1.45],
+        slim: [0.62, 0.72, 1.15],
+        round: [0.78, 1.05, 0.95],
+        flat: [1.25, 0.5, 0.9],
+        shark: [0.66, 0.74, 1.45],
       };
       const [sx, sy, sz] = dims[shape] ?? dims.round;
-      const b = mesh(new THREE.SphereGeometry(1, 7, 5), color, bodyMat);
+      const b = new THREE.Mesh(fishBody(), flat(color, { vertexColors: true, emissive }));
       b.scale.set(sx, sy, sz);
       body.add(b);
-      const dorsal = mesh(new THREE.ConeGeometry(shape === 'shark' ? 0.35 : 0.22, shape === 'shark' ? 0.8 : 0.45, 3), finColor);
-      dorsal.position.set(0, sy + (shape === 'shark' ? 0.25 : 0.1), -0.1);
-      dorsal.scale.set(0.3, 1, 1);
+      const fin = flat(finColor, { doubleSide: true, emissive });
+      // tail on a pivot so it can swish
+      const tailPivot = new THREE.Group();
+      tailPivot.position.z = -sz * 0.92;
+      tailPivot.userData.tail = true;
+      tailPivot.userData.tailBase = 0;
+      const tailShape: [number, number][] = shape === 'shark'
+        ? [[0, 0], [-0.35, 0.6], [-0.5, 0.62], [-0.3, 0], [-0.4, -0.35], [-0.3, -0.36]]
+        : [[0, 0], [-0.42, 0.42], [-0.55, 0.38], [-0.32, 0], [-0.55, -0.38], [-0.42, -0.42]];
+      const tail = new THREE.Mesh(finGeo(tailShape, shape === 'shark' ? 'tail-shark' : 'tail'), fin);
+      tail.scale.setScalar(Math.max(sy, 0.7));
+      tailPivot.add(tail);
+      body.add(tailPivot);
+      // dorsal fin
+      const dorsalShape: [number, number][] = shape === 'shark'
+        ? [[0.25, 0], [-0.05, 0.62], [-0.2, 0.6], [-0.3, 0]]
+        : [[0.35, 0], [0.05, 0.32], [-0.3, 0.26], [-0.45, 0]];
+      const dorsal = new THREE.Mesh(finGeo(dorsalShape, shape === 'shark' ? 'dorsal-shark' : 'dorsal'), fin);
+      dorsal.position.set(0, sy * 0.46, -0.05);
       body.add(dorsal);
-      addTail(-sz - 0.25, 0.6, shape === 'flat' ? 0.5 : 0.4);
-      const eye = mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), 0x1a1a1a);
-      for (const s of [-1, 1]) {
-        const e = eye.clone();
-        e.position.set(s * sx * 0.75, sy * 0.25, sz * 0.6);
-        body.add(e);
+      // pectoral fins
+      for (const side of [-1, 1]) {
+        const pec = new THREE.Mesh(finGeo([[0.15, 0], [-0.25, 0.08], [-0.2, -0.18]], 'pec'), fin);
+        pec.position.set(side * sx * 0.45, -sy * 0.12, sz * 0.25);
+        pec.rotation.set(0, side * 0.5, side * 1.2);
+        pec.userData.pec = side;
+        body.add(pec);
+      }
+      // eyes: white with a dark pupil
+      for (const side of [-1, 1]) {
+        const eye = mesh(new THREE.IcosahedronGeometry(0.11, 0), 0xffffff);
+        eye.position.set(side * sx * 0.36, sy * 0.12, sz * 0.62);
+        body.add(eye);
+        const pupil = mesh(new THREE.IcosahedronGeometry(0.065, 0), 0x111111);
+        pupil.position.set(side * (sx * 0.36 + 0.06), sy * 0.13, sz * 0.66);
+        body.add(pupil);
       }
     }
   }
@@ -907,6 +1007,57 @@ export function createDecor(id: 'flowers' | 'lanterns' | 'fountain' | 'statue' |
         g.add(flag);
       }
       break;
+  }
+  return g;
+}
+
+// ---------------------------------------------------------------------------
+// Ambience
+// ---------------------------------------------------------------------------
+
+let shadowTex: THREE.Texture | null = null;
+/** Soft dark blob under boats on the water (fake shadow, cheap on phones). */
+export function createBlobShadow(length: number, width: number): THREE.Mesh {
+  if (!shadowTex) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d')!;
+    const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 32);
+    g.addColorStop(0, 'rgba(0,20,40,0.55)');
+    g.addColorStop(1, 'rgba(0,20,40,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    shadowTex = new THREE.CanvasTexture(c);
+  }
+  const m = new THREE.Mesh(shared(new THREE.PlaneGeometry(1, 1)), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2;
+  m.scale.set(width, length, 1);
+  m.renderOrder = 12;
+  return m;
+}
+
+/** Low-poly seagull with flapping wings. */
+export function createGull(): THREE.Group {
+  const g = new THREE.Group();
+  const body = mesh(new THREE.ConeGeometry(0.16, 0.8, 4), 0xffffff);
+  body.rotation.x = Math.PI / 2;
+  g.add(body);
+  const head = mesh(new THREE.IcosahedronGeometry(0.12, 0), 0xffffff);
+  head.position.z = 0.4;
+  g.add(head);
+  const beak = mesh(new THREE.ConeGeometry(0.04, 0.15, 3), 0xffb000);
+  beak.rotation.x = Math.PI / 2;
+  beak.position.z = 0.55;
+  g.add(beak);
+  for (const side of [-1, 1]) {
+    const pivot = new THREE.Group();
+    const wing = mesh(new THREE.BoxGeometry(0.9, 0.03, 0.28), 0xf2f2f2);
+    wing.position.x = side * 0.45;
+    const tip = mesh(new THREE.BoxGeometry(0.3, 0.031, 0.22), 0x3a3f4a);
+    tip.position.x = side * 0.8;
+    pivot.add(wing, tip);
+    pivot.userData.wing = side;
+    g.add(pivot);
   }
   return g;
 }

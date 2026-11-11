@@ -521,3 +521,8 @@ button { font-family: inherit; color: inherit; border: 0; cursor: pointer; }
 .playtest summary { font-weight: 800; cursor: pointer; }
 .playtest .milestones { margin: 6px 0 8px; padding-left: 22px; font-size: 13px; max-height: 220px; overflow-y: auto; }
 .playtest .milestones b { font-variant-numeric: tabular-nums; }
+
+/* ---------- coins flying to the counter ---------- */
+.fly-coin { position: absolute; width: 18px; height: 18px; transform: translate(-50%, -50%); pointer-events: none; z-index: 5; }
+.amount.bump { animation: bump 0.25s ease-out; }
+@keyframes bump { 50% { transform: scale(1.12); } }

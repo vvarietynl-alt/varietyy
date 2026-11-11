@@ -110,6 +110,16 @@ van je inkomen.
 - Aankopen via `src/services/billing.ts` (testmodus: bevestiging, niets afgeschreven; in de Android-app Google Play Billing)
 - Speeltest-optie: `?timescale=8` speelt de game 8× versneld (alleen voor testen)
 
+## Beeld en geluid
+
+- **Vissen**: gestroomlijnd lijf met donkere rug en lichte buik, staart-, rug- en borstvinnen, ogen met pupil; ze deuken in bij een tik
+- **Boot**: reling, reddingsboei, stootwillen, schoorsteen met rook, wapperende vlag; zachte schaduw onder alle boten
+- **Effecten** (`src/render/effects.ts`, één draw call voor alle deeltjes): zachte spetters, kringen in het water, schuimspoor,
+  fonkelingen, uitbarstingen bij zeldzame vangsten/bosses/schatten, munten die naar de goudteller vliegen, meeuwen
+- **Licht**: warme zon met zachte schaduwen op het eiland, ACES-tonemapping, kleurverloop in de lucht
+- **Geluid** (`src/audio.ts`, alles gesynthetiseerd): Caribisch deuntje (steeldrums, calypso-bas, off-beat akkoorden, shaker,
+  vier wisselende melodieën) en speelse effecten; muziek en effecten apart aan/uit in Instellingen, pauzeert op de achtergrond
+
 ## Playtest-analytics
 
 `src/services/analytics.ts` houdt bij hoe ver spelers komen en wanneer: startscherm, eerste vangst, eerste zeldzame vis,

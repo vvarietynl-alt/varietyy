@@ -3,7 +3,8 @@ import { speciesFor } from '../data/fish';
 import { boatClassFor, type Fleet, PIER_X, piersFor } from '../game/fleet';
 import { ISLAND_RADIUS } from '../game/fishing';
 import type { Game } from '../game/game';
-import { createCrate, createFish, createFleetBoat, createPier, type FleetBoatModel } from './models';
+import type { Effects } from './effects';
+import { createBlobShadow, createCrate, createFish, createFleetBoat, createPier, type FleetBoatModel } from './models';
 
 interface Flyer {
   obj: THREE.Object3D;
@@ -30,7 +31,7 @@ export class FleetRenderer {
     private fleet: Fleet,
     private game: Game,
     private waveHeight: (x: number, z: number) => number,
-    private splash: (x: number, z: number, count: number, color: number, size?: number) => void,
+    private effects: Effects,
   ) {
     scene.add(this.piers);
     fleet.on((e) => {
@@ -38,7 +39,7 @@ export class FleetRenderer {
       if (!m) return;
       if (e.type === 'fleet-catch') this.catchFish(e.boat.x, e.boat.z, e.boat.heading, m);
       if (e.type === 'fleet-unload') this.unloadCrate(m);
-      if (e.type === 'fleet-launch') this.splash(e.boat.x, e.boat.z, 12, 0xffffff);
+      if (e.type === 'fleet-launch') this.effects.splash(e.boat.x, e.boat.z, 12, 0xffffff, 1);
     });
   }
 
@@ -51,6 +52,11 @@ export class FleetRenderer {
       let m = this.models.get(b.id);
       if (!m) {
         m = createFleetBoat(b.tier, boatClassFor(b.tier));
+        const cls = boatClassFor(b.tier);
+        const len = cls === 'rowboat' ? 2.8 : cls === 'fishingBoat' ? 3.6 : 5;
+        const shadow = createBlobShadow(len, len * 0.55);
+        m.group.userData.shadow = shadow;
+        this.scene.add(shadow);
         this.models.set(b.id, m);
         this.scene.add(m.group);
         const line = new THREE.Line(
@@ -64,6 +70,9 @@ export class FleetRenderer {
       const g = m.group;
       const moving = b.state === 'leaving' || b.state === 'transit' || b.state === 'returning' || b.state === 'arriving';
       g.position.set(b.x, this.waveHeight(b.x, b.z) - 0.25, b.z);
+      const sh = g.userData.shadow as THREE.Mesh;
+      sh.position.set(b.x, 0.06, b.z);
+      sh.rotation.z = -b.heading;
       g.rotation.y = b.heading;
       g.rotation.z = Math.sin(b.phase * 1.6) * 0.06;
       g.rotation.x = Math.sin(b.phase * 1.2) * 0.04 + (moving ? -0.04 : 0);
@@ -75,7 +84,7 @@ export class FleetRenderer {
         if (o.userData.spin) o.rotation.y += dt * 1.5;
       });
       if (moving && Math.random() < dt * 10) {
-        this.splash(b.x - Math.sin(b.heading) * 1.4, b.z - Math.cos(b.heading) * 1.4, 1, 0xffffff, 0.5);
+        this.effects.wake(b.x - Math.sin(b.heading) * 1.6, b.z - Math.cos(b.heading) * 1.6, 0.7);
       }
       const line = this.lines.get(b.id)!;
       line.visible = b.state === 'fishing';
@@ -92,6 +101,7 @@ export class FleetRenderer {
     for (const [id, m] of this.models) {
       if (!alive.has(id)) {
         this.scene.remove(m.group);
+        this.scene.remove(m.group.userData.shadow);
         const line = this.lines.get(id)!;
         this.scene.remove(line);
         line.geometry.dispose();
@@ -137,7 +147,7 @@ export class FleetRenderer {
     const from = new THREE.Vector3(x + Math.sin(side) * 2.4, -0.2, z + Math.cos(side) * 2.4);
     fish.position.copy(from);
     this.scene.add(fish);
-    this.splash(from.x, from.z, 6, 0xffffff, 0.7);
+    this.effects.splash(from.x, from.z, 6, 0xffffff, 0.7);
     this.flyers.push({ obj: fish, from, to: () => m.hold.getWorldPosition(new THREE.Vector3()), t: 0, duration: 0.7, height: 2, keep: 0 });
   }
 
@@ -174,7 +184,10 @@ export class FleetRenderer {
   }
 
   reset(): void {
-    for (const m of this.models.values()) this.scene.remove(m.group);
+    for (const m of this.models.values()) {
+      this.scene.remove(m.group);
+      this.scene.remove(m.group.userData.shadow);
+    }
     for (const l of this.lines.values()) this.scene.remove(l);
     this.models.clear();
     this.lines.clear();

@@ -766,20 +766,21 @@ export class PanelManager {
         icon: '⚙️',
         title: () => 'Settings',
         build: (body) => {
-          const toggle = (label: string, key: 'sound' | 'haptics') => {
+          const toggle = (label: string, key: 'sound' | 'music' | 'haptics') => {
             const btn = pressButton({ class: 'btn small' }, () => { s().settings[key] = !s().settings[key]; }, '');
             return [
               h('div', { class: 'row' }, h('div', { class: 'info' }, h('b', null, label)), btn),
               () => { setText(btn, s().settings[key] ? 'On' : 'Off'); btn.classList.toggle('red', !s().settings[key]); },
             ] as const;
           };
-          const [r1, u1] = toggle('Sound', 'sound');
+          const [r1, u1] = toggle('Sound effects', 'sound');
+          const [r3, u3] = toggle('Music', 'music');
           const [r2, u2] = toggle('Vibration', 'haptics');
           const st = s().stats;
           const name = h('input', { id: 'company-name', class: 'text-input', maxlength: 24, value: s().companyName, oninput: (e: Event) => { s().companyName = (e.target as HTMLInputElement).value.trim() || 'Whale Hunter Co.'; } });
           body.append(
             h('div', { class: 'row' }, h('div', { class: 'ico' }, '🏢'), h('div', { class: 'info' }, h('b', null, 'Company name'), name)),
-            r1, r2,
+            r1, r3, r2,
             h('div', { class: 'summary' },
               h('span', null, 'Fish caught ', h('b', null, formatNumber(st.fishCaught))),
               h('span', null, 'Goldfish ', h('b', null, formatNumber(st.goldfishCaught))),
@@ -790,7 +791,7 @@ export class PanelManager {
             pressButton({ class: 'btn red wide' }, () => this.host.confirmReset(), 'Reset progress'),
             h('p', { class: 'note' }, 'Whale Hunter v0.1 — prototype'),
           );
-          return [u1, u2];
+          return [u1, u2, u3];
         },
       },
     };
