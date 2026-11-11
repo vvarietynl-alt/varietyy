@@ -527,3 +527,217 @@ export function createRock(size: number, color = 0x8c96a3): THREE.Mesh {
   r.scale.y = 1.4;
   return r;
 }
+
+// ---------------------------------------------------------------------------
+// Fishing company: fleet boats, crew and harbour
+// ---------------------------------------------------------------------------
+
+const TIER_COLORS = [
+  0x3a7bd5, 0xe8a33a, 0x4cae4f, 0xd84b6a, 0x2fb5a8, 0x8a5cd6, 0xf0c93a, 0x3c5a99,
+  0xe0663a, 0x5fb3e8, 0xb84ad9, 0x47a36b, 0xd9603e, 0x2e6fb5, 0x7d4fc9, 0xc23b3b,
+  0x2a9d8f, 0x1d3557, 0x222222, 0xff7aa2, 0x8b5a2b, 0x4f6d7a, 0xffd23f, 0x3b1f6b, 0x6a2ea0,
+];
+
+/** Little low-poly fisherman: body, head, hat. */
+export function createCrew(shirt: number, hat: number): THREE.Group {
+  const g = new THREE.Group();
+  const body = mesh(new THREE.CylinderGeometry(0.17, 0.22, 0.5, 6), shirt);
+  body.position.y = 0.25;
+  g.add(body);
+  const head = mesh(new THREE.IcosahedronGeometry(0.16, 0), 0xf1c27d);
+  head.position.y = 0.62;
+  g.add(head);
+  const brim = mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.04, 8), hat);
+  brim.position.y = 0.74;
+  g.add(brim);
+  const top = mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.14, 8), hat);
+  top.position.y = 0.82;
+  g.add(top);
+  return g;
+}
+
+export interface FleetBoatModel {
+  group: THREE.Group;
+  rodTip: THREE.Object3D;
+  /** where caught fish land */
+  hold: THREE.Object3D;
+  crew: THREE.Group[];
+}
+
+export function createFleetBoat(tier: number, cls: 'rowboat' | 'fishingBoat' | 'trawler' | 'galleon' | 'mystic'): FleetBoatModel {
+  const group = new THREE.Group();
+  const color = TIER_COLORS[tier % TIER_COLORS.length];
+  const crew: THREE.Group[] = [];
+  const rodTip = new THREE.Object3D();
+  const hold = new THREE.Object3D();
+  const addRod = (x: number, y: number, z: number, len: number) => {
+    const rod = new THREE.Group();
+    const pole = mesh(new THREE.CylinderGeometry(0.025, 0.04, len, 4), 0x5a3a1e);
+    pole.position.y = len / 2;
+    rod.add(pole);
+    rodTip.position.y = len;
+    rod.add(rodTip);
+    rod.position.set(x, y, z);
+    rod.rotation.set(0.15, 0, -0.9);
+    group.add(rod);
+  };
+  const hullFrom = (len: number, width: number, height: number, hullColor: number, trim: number) => {
+    const shape = new THREE.Shape();
+    shape.moveTo(0, len * 0.55);
+    shape.quadraticCurveTo(width * 0.55, len * 0.25, width * 0.5, -len * 0.2);
+    shape.lineTo(width * 0.42, -len * 0.45);
+    shape.lineTo(-width * 0.42, -len * 0.45);
+    shape.lineTo(-width * 0.5, -len * 0.2);
+    shape.quadraticCurveTo(-width * 0.55, len * 0.25, 0, len * 0.55);
+    const low = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: height * 0.65, bevelEnabled: false, curveSegments: 3 }), flat(hullColor));
+    low.rotation.x = Math.PI / 2;
+    low.position.y = height * 0.3;
+    group.add(low);
+    const up = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: height * 0.35, bevelEnabled: false, curveSegments: 3 }), flat(trim));
+    up.rotation.x = Math.PI / 2;
+    up.position.y = height * 0.65;
+    group.add(up);
+    const deck = mesh(new THREE.BoxGeometry(width * 0.75, 0.05, len * 0.75), 0xc58b52);
+    deck.position.set(0, height * 0.66, -len * 0.05);
+    group.add(deck);
+    return height * 0.68;
+  };
+
+  switch (cls) {
+    case 'rowboat': {
+      const deckY = hullFrom(2.2, 1.1, 0.5, 0x9a6b3c, color);
+      const c = createCrew(color, 0xf0d060);
+      c.position.set(0, deckY, -0.2);
+      crew.push(c);
+      addRod(0.3, deckY + 0.3, 0.1, 1.8);
+      hold.position.set(0, deckY + 0.1, 0.5);
+      for (const s of [-1, 1]) {
+        const oar = mesh(new THREE.BoxGeometry(1.2, 0.04, 0.12), 0x8a5a30);
+        oar.position.set(s * 0.75, deckY, -0.2);
+        oar.rotation.z = s * -0.3;
+        group.add(oar);
+      }
+      break;
+    }
+    case 'fishingBoat': {
+      const deckY = hullFrom(2.8, 1.4, 0.7, color, 0xfaf6ee);
+      const cabin = mesh(new THREE.BoxGeometry(0.9, 0.7, 0.8), 0xfaf6ee);
+      cabin.position.set(0, deckY + 0.35, -0.5);
+      group.add(cabin);
+      const roof = mesh(new THREE.BoxGeometry(1.05, 0.1, 0.95), color);
+      roof.position.set(0, deckY + 0.75, -0.5);
+      group.add(roof);
+      for (const x of [-0.3, 0.35]) {
+        const c = createCrew(x < 0 ? 0xf2c14e : 0x3a7bd5, 0xe8463a);
+        c.position.set(x, deckY, 0.45);
+        crew.push(c);
+      }
+      addRod(0.45, deckY + 0.3, 0.6, 2.2);
+      hold.position.set(0, deckY + 0.1, 0.8);
+      break;
+    }
+    case 'trawler': {
+      const deckY = hullFrom(3.8, 1.7, 0.9, color, 0xf2efe6);
+      const cabin = mesh(new THREE.BoxGeometry(1.2, 1.1, 1.1), 0xf2efe6);
+      cabin.position.set(0, deckY + 0.55, 0.6);
+      group.add(cabin);
+      const bridge = mesh(new THREE.BoxGeometry(1.0, 0.45, 0.8), 0xf2efe6);
+      bridge.position.set(0, deckY + 1.3, 0.6);
+      group.add(bridge);
+      const win = mesh(new THREE.BoxGeometry(0.8, 0.2, 0.05), 0x3b5f7a);
+      win.position.set(0, deckY + 1.35, 1.01);
+      group.add(win);
+      const boom = mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 4), 0x555b66);
+      boom.position.set(0, deckY + 1.4, -1.0);
+      boom.rotation.x = 0.5;
+      group.add(boom);
+      const net = mesh(new THREE.DodecahedronGeometry(0.4, 0), 0x6b8f71);
+      net.position.set(0, deckY + 0.3, -1.3);
+      group.add(net);
+      for (const [x, z] of [[-0.5, -0.4], [0.5, -0.6], [0, -1.6]]) {
+        const c = createCrew(0xff8c1a, 0xffd23f);
+        c.position.set(x, deckY, z);
+        crew.push(c);
+      }
+      addRod(0.7, deckY + 0.2, -0.4, 2.4);
+      hold.position.set(0, deckY + 0.2, -1.2);
+      break;
+    }
+    case 'galleon': {
+      const pirate = tier === 18;
+      const deckY = hullFrom(4.6, 1.9, 1.1, pirate ? 0x2a2a2a : 0x7a4a24, pirate ? 0x8b1e1e : color);
+      for (const z of [0.9, -0.9]) {
+        const mast = mesh(new THREE.CylinderGeometry(0.07, 0.09, 3.2, 5), 0x6b4423);
+        mast.position.set(0, deckY + 1.6, z);
+        group.add(mast);
+        const sail = mesh(new THREE.BoxGeometry(1.6, 1.4, 0.05), pirate ? 0x1a1a1a : 0xfaf3e0);
+        sail.position.set(0, deckY + 1.9, z + 0.1);
+        group.add(sail);
+      }
+      const flagM = mesh(new THREE.BoxGeometry(0.04, 0.3, 0.5), pirate ? 0x111111 : color);
+      flagM.position.set(0, deckY + 3.3, 0.7);
+      group.add(flagM);
+      const stern = mesh(new THREE.BoxGeometry(1.5, 0.6, 0.9), 0x8a5a30);
+      stern.position.set(0, deckY + 0.3, -1.7);
+      group.add(stern);
+      for (const [x, z] of [[-0.5, 0.2], [0.5, -0.3], [0, 1.6], [0, -1.7]]) {
+        const c = createCrew(pirate ? 0xe8e8e8 : 0x3a7bd5, pirate ? 0x111111 : 0x2a2a2a);
+        c.position.set(x, z === -1.7 ? deckY + 0.6 : deckY, z);
+        crew.push(c);
+      }
+      addRod(0.8, deckY + 0.2, 1.2, 2.6);
+      hold.position.set(0, deckY + 0.2, 0);
+      break;
+    }
+    case 'mystic': {
+      const deckY = hullFrom(4.2, 1.8, 1.0, 0x2b1f4a, color);
+      const glow = flat(0x9dfff0, { emissive: 0x6fffe0 });
+      const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 0), glow);
+      orb.position.set(0, deckY + 2.2, 0);
+      orb.userData.spin = true;
+      group.add(orb);
+      const mast = mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.8, 5), 0xd9c8ff);
+      mast.position.set(0, deckY + 0.9, 0);
+      group.add(mast);
+      const sail = mesh(new THREE.ConeGeometry(0.9, 1.6, 3), color, { transparent: true, opacity: 0.85, emissive: color });
+      sail.position.set(0, deckY + 1.2, -0.6);
+      sail.rotation.y = Math.PI / 6;
+      group.add(sail);
+      for (let i = 0; i < 4; i++) {
+        const cr = mesh(new THREE.OctahedronGeometry(0.15, 0), 0xfff3a8, { emissive: 0xffe066 });
+        cr.position.set(i % 2 ? 0.8 : -0.8, deckY + 0.3, 1.2 - i * 0.8);
+        group.add(cr);
+      }
+      for (const [x, z] of [[-0.45, 0.9], [0.45, 0.9], [0, -1.4]]) {
+        const c = createCrew(0x6a2ea0, 0xffd23f);
+        c.position.set(x, deckY, z);
+        crew.push(c);
+      }
+      addRod(0.7, deckY + 0.2, 1.4, 2.6);
+      hold.position.set(0, deckY + 0.2, 0.2);
+      break;
+    }
+  }
+  for (const c of crew) group.add(c);
+  group.add(hold);
+  return { group, rodTip, hold, crew };
+}
+
+/** Extra piers and crate stacks; shown as the company grows. */
+export function createPier(length: number): THREE.Group {
+  const g = new THREE.Group();
+  const planks = mesh(new THREE.BoxGeometry(1.6, 0.22, length), 0xb0763f);
+  planks.position.set(0, 0.3, length / 2);
+  g.add(planks);
+  for (let i = 0; i <= 2; i++) for (const dx of [-0.65, 0.65]) {
+    const post = mesh(new THREE.CylinderGeometry(0.13, 0.13, 2, 5), 0x7a4f2a);
+    post.position.set(dx, -0.4, (i / 2) * length);
+    g.add(post);
+  }
+  return g;
+}
+
+export function createCrate(): THREE.Mesh {
+  const c = mesh(new THREE.BoxGeometry(0.6, 0.45, 0.6), 0xc8924f);
+  return c;
+}

@@ -3,6 +3,8 @@ import '@fontsource/baloo-2/700.css';
 import '@fontsource/baloo-2/800.css';
 import { Audio, vibrate } from './audio';
 import { FishingWorld } from './game/fishing';
+import { BOAT_CLASS_NAMES, boatClassFor, Fleet } from './game/fleet';
+import { FISHERMAN_NAMES } from './data/balance';
 import { formatNumber } from './game/format';
 import { Game } from './game/game';
 import { loadState, newGame, SAVE_KEY, serializeState } from './game/state';
@@ -26,7 +28,8 @@ function readSave(): string | null {
 
 const game = new Game(loadState(readSave()));
 const world = new FishingWorld(game);
-const renderer = new WorldRenderer(canvas, world, game);
+const fleet = new Fleet(game, () => world.boat);
+const renderer = new WorldRenderer(canvas, world, game, fleet);
 const audio = new Audio();
 
 function save(): void {
@@ -51,6 +54,8 @@ const panels = new PanelManager(uiRoot, {
   confirmReset: () => hud.confirmReset(() => {
     try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
     game.state = newGame();
+    fleet.reset();
+    renderer.fleetRenderer.reset();
     panels.close();
     renderer.mode = 'sea';
     world.syncZone(true);
@@ -137,6 +142,18 @@ world.on((e) => {
   }
 });
 
+fleet.on((e) => {
+  if (e.type === 'fleet-unload') {
+    const p = renderer.toScreen(e.boat.x, 2, e.boat.z);
+    if (p.visible && e.gold > 0) overlay.floatGold(e.boat.x, e.boat.z, e.gold);
+  } else if (e.type === 'fleet-launch' && e.boat.index === 0) {
+    const cls = BOAT_CLASS_NAMES[boatClassFor(e.boat.tier)];
+    hud.toast([e.firstOfClass ? `⛵ New boat type: ${cls}! ${FISHERMAN_NAMES[e.boat.tier]} sets sail` : `⛵ ${FISHERMAN_NAMES[e.boat.tier]} joins your fleet`], e.firstOfClass);
+  } else if (e.type === 'fleet-launch') {
+    hud.toast([`⛵ Extra ${BOAT_CLASS_NAMES[boatClassFor(e.boat.tier)].toLowerCase()} for your ${FISHERMAN_NAMES[e.boat.tier]}s`]);
+  }
+});
+
 // --- Input -----------------------------------------------------------------------
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -189,6 +206,7 @@ function frame(now: number): void {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   game.tick(dt);
+  fleet.update(dt);
   // a boss fight pauses while a menu is open
   const menuOpen = !!panels.current || renderer.mode === 'island' || hud.modalOpen;
   if (!(world.fight && menuOpen)) world.update(dt);
@@ -201,4 +219,4 @@ function frame(now: number): void {
 requestAnimationFrame(frame);
 
 // Debug helpers for testing in the browser console.
-(window as unknown as Record<string, unknown>).whaleHunter = { game, world, save, h };
+(window as unknown as Record<string, unknown>).whaleHunter = { game, world, fleet, save, h };

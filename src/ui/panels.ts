@@ -25,6 +25,7 @@ import {
   zoneAverageGold,
   zoneUnlockPrice,
 } from '../game/economy';
+import { BOAT_CLASS_NAMES, boatClassFor, boatsForTier, MAX_FLEET_BOATS } from '../game/fleet';
 import { formatNumber } from '../game/format';
 import type { Game } from '../game/game';
 import type { BuildingId } from '../render/models';
@@ -250,15 +251,17 @@ export class PanelManager {
       fishermenSchool: {
         icon: '🎓',
         title: () => "Fishermen's School",
-        subtitle: () => 'Fishermen catch fish for you — even offline',
+        subtitle: () => 'Grow your fishing company — they fish even offline',
         key: () => `${s().fishermen.findIndex((n) => n === 0)}-${this.buyAmount}`,
         build: (body) => {
           const ups: Updater[] = [];
           const fps = h('b');
           const value = h('b');
           const income = h('b');
+          const boats = h('b');
           body.append(
             h('div', { class: 'summary' },
+              h('span', null, '⛵ Boats ', boats),
               h('span', null, 'Fleet ', fps),
               h('span', null, 'Fish value ', value, ' ', coin()),
               h('span', null, 'Income ', income, ' ', coin(), '/s'),
@@ -269,15 +272,16 @@ export class PanelManager {
             setText(fps, `${formatNumber(fleetFishPerSecond(st.fishermen))} fish/s`);
             setText(value, formatNumber(zoneAverageGold(st.level, bestFishingZone(st.unlockedZone))));
             setText(income, formatNumber(game.incomePerSecond));
+            setText(boats, String(Math.min(MAX_FLEET_BOATS, st.fishermen.reduce((a, n) => a + boatsForTier(n), 0))));
           });
           const seg = h('div', { class: 'seg' });
           for (const amt of [1, 10, 'max'] as const) {
             seg.append(pressButton({ class: this.buyAmount === amt ? 'on' : '' }, () => { this.buyAmount = amt; this.rebuild(); }, amt === 'max' ? 'Max' : `×${amt}`));
           }
-          body.append(seg);
+          body.append(seg, h('p', { class: 'note', style: 'margin:-4px 0 8px' }, 'Every fisherman sails his own boat. Hire 10, 25, 50, 100 and 200 for extra boats.'));
           for (let tier = 0; tier < FISHERMAN_NAMES.length; tier++) {
             if (!game.isFishermanUnlocked(tier)) {
-              body.append(h('div', { class: 'row locked' }, h('div', { class: 'ico' }, '❔'), h('div', { class: 'info' }, h('b', null, FISHERMAN_NAMES[tier]), h('small', null, `Hire a ${FISHERMAN_NAMES[tier - 1]} to unlock`))));
+              body.append(h('div', { class: 'row locked' }, h('div', { class: 'ico' }, '❔'), h('div', { class: 'info' }, h('b', null, FISHERMAN_NAMES[tier]), h('small', null, `Sails a ${BOAT_CLASS_NAMES[boatClassFor(tier)].toLowerCase()} · hire a ${FISHERMAN_NAMES[tier - 1]} to unlock`))));
               break;
             }
             const owned = h('span', { class: 'lvl' });
@@ -291,7 +295,7 @@ export class PanelManager {
             }, h('span', null, label, ' ', coin(), price));
             body.append(h('div', { class: 'row' },
               h('div', { class: 'ico' }, FISHERMAN_ICONS[tier]),
-              h('div', { class: 'info' }, h('b', null, FISHERMAN_NAMES[tier], ' ', owned), prod, milestone),
+              h('div', { class: 'info' }, h('b', null, FISHERMAN_NAMES[tier], ' ', owned), h('small', null, `⛵ ${BOAT_CLASS_NAMES[boatClassFor(tier)]}`), prod, milestone),
               btn,
             ));
             ups.push(() => {

@@ -3,6 +3,8 @@ import type { CatchableRarity } from '../data/balance';
 import { LEVEL_THEMES, type FishSpecies } from '../data/fish';
 import { type FishEntity, type FishingWorld, ISLAND_RADIUS, ZONE_WIDTH, zoneBand } from '../game/fishing';
 import type { Game } from '../game/game';
+import type { Fleet } from '../game/fleet';
+import { FleetRenderer } from './fleet';
 import { type BoatModel, type BuildingId, createBoat, createFish, createIsland, createRock, flat } from './models';
 import { createOcean } from './ocean';
 
@@ -52,8 +54,9 @@ export class WorldRenderer {
   private time = 0;
   private themeLevel = 0;
   mode: CameraMode = 'sea';
+  readonly fleetRenderer: FleetRenderer;
 
-  constructor(private canvas: HTMLCanvasElement, private world: FishingWorld, private game: Game) {
+  constructor(private canvas: HTMLCanvasElement, private world: FishingWorld, private game: Game, fleet: Fleet) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -90,6 +93,8 @@ export class WorldRenderer {
 
     this.boat = createBoat();
     this.scene.add(this.boat.group);
+
+    this.fleetRenderer = new FleetRenderer(this.scene, fleet, game, (x, z) => this.waveHeight(x, z), (x, z, n, c, sz) => this.splash(x, z, n, c, sz));
 
     this.line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
@@ -221,6 +226,7 @@ export class WorldRenderer {
     u.uZoneW.value = ZONE_WIDTH;
 
     this.updateBoat(dt);
+    this.fleetRenderer.update(dt);
     this.syncFish(dt);
     this.syncGoldfish();
     this.syncBoss(dt);
