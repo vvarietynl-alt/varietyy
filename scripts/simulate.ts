@@ -47,6 +47,8 @@ let levelStart = 0;
 let zoneStart = 0;
 let activeGold = 0;
 let fleetGold = 0;
+/** Longest wait between two zone unlocks in the current level ("is it getting boring?"). */
+let longestWait = 0;
 
 function averageHp(level: number, zone: number): number {
   // spawn-weighted HP is close to common×1.25 in the outer zones; keep it simple
@@ -122,7 +124,7 @@ const MAX_SECONDS = 2000 * 3600;
 function playVoyage(endless: boolean): void {
   let lastLevelTime = 0;
   const voyageStart = t;
-  if (!endless) console.log('level | time      | cumulative | fleet share | fishermen owned (top tier) | skill/speed/auto');
+  if (!endless) console.log('level | time      | cumulative | fleet share | fishermen owned (top tier) | skill/speed/auto | longest wait for a new zone');
   while (t < MAX_SECONDS) {
     if (endless) {
       const inLevel = t - levelStart;
@@ -133,6 +135,7 @@ function playVoyage(endless: boolean): void {
     const st = game.nextZoneStatus();
     if (st.kind === 'ready') {
       game.unlockNextZone();
+      longestWait = Math.max(longestWait, t - zoneStart);
       if (printZones) console.log(`   zone ${s.unlockedZone - 1} → ${s.unlockedZone} after ${formatDuration(t - zoneStart)}`);
       zoneStart = t;
       continue;
@@ -142,11 +145,13 @@ function playVoyage(endless: boolean): void {
     if (atBoss && !s.bossesDefeated[bossIndex] && canBeatBoss(bossIndex)) {
       t += game.bossSeconds;
       game.defeatBoss(bossIndex);
+      longestWait = Math.max(longestWait, t - zoneStart);
+      zoneStart = t;
       continue;
     }
     if (game.levelComplete) {
       if (!endless && (s.level >= LEVEL_COUNT || s.level >= Number(process.env.SIM_STOP_LEVEL ?? 99))) {
-        console.log(`${String(s.level).padStart(5)} | ${formatDuration(t - levelStart).padEnd(9)} | ${formatDuration(t)}`);
+        console.log(`${String(s.level).padStart(5)} | ${formatDuration(t - levelStart).padEnd(9)} | ${formatDuration(t).padEnd(10)} | longest wait ${formatDuration(Math.max(longestWait, t - zoneStart))}`);
         return;
       }
       if (game.canSailToNextLevel()) {
@@ -154,9 +159,10 @@ function playVoyage(endless: boolean): void {
         if (!endless) {
           console.log(
             `${String(s.level).padStart(5)} | ${formatDuration(t - levelStart).padEnd(9)} | ${formatDuration(t).padEnd(10)} | ${((fleetGold / (fleetGold + activeGold)) * 100).toFixed(0).padStart(10)}% | ${String(s.fishermen.reduce((a, b) => a + b, 0)).padStart(5)} (tier ${top + 1}: ${s.fishermen[top] ?? 0})`.padEnd(70) +
-              ` | ${s.upgrades.skill}/${s.upgrades.speed}/${s.upgrades.autoGear}`,
+              ` | ${s.upgrades.skill}/${s.upgrades.speed}/${s.upgrades.autoGear} | longest wait ${formatDuration(Math.max(longestWait, t - zoneStart))}`,
           );
         }
+        longestWait = 0;
         lastLevelTime = t - levelStart;
         game.sailToNextLevel();
         levelStart = t;
