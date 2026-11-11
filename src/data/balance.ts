@@ -277,3 +277,63 @@ export const AD_RUBY_REWARD = 5;
 
 /** Assumed human tap rate, used by the simulation script. */
 export const SIM_TAPS_PER_SECOND = 5;
+
+// ---------------------------------------------------------------------------
+// Engagement: combo/frenzy, crits, lucky catches, treasure, boosts,
+// missions and daily rewards.
+// ---------------------------------------------------------------------------
+
+/** Taps closer together than this keep the combo going. */
+export const COMBO_WINDOW = 0.55;
+/** Combo needed to start a frenzy. */
+export const COMBO_FOR_FRENZY = 30;
+export const FRENZY_SECONDS = 8;
+export const FRENZY_DAMAGE_MULT = 2;
+export const FRENZY_GOLDFISH_MULT = 2;
+
+export const CRIT_CHANCE = 0.08;
+export const CRIT_MULT = 3;
+export const LUCKY_CATCH_CHANCE = 0.05;
+export const LUCKY_CATCH_MULT = 3;
+
+/** Seconds between floating treasure (random in this range). */
+export const TREASURE_INTERVAL = [75, 150] as const;
+export const TREASURE_LIFETIME = 14;
+
+export type BoostId = 'doubleHaul' | 'strongArms' | 'goldenTide';
+export interface BoostDef {
+  id: BoostId;
+  name: string;
+  description: string;
+  minutes: number;
+  rubyCost: number;
+  /** Can be earned by watching an ad. */
+  ad: boolean;
+}
+export const BOOSTS: Record<BoostId, BoostDef> = {
+  doubleHaul: { id: 'doubleHaul', name: 'Double Haul', description: '2× gold from every fish, fleet included', minutes: 15, rubyCost: 10, ad: true },
+  strongArms: { id: 'strongArms', name: 'Strong Arms', description: '2× tap damage', minutes: 10, rubyCost: 6, ad: false },
+  goldenTide: { id: 'goldenTide', name: 'Golden Tide', description: '3× more golden koi', minutes: 10, rubyCost: 6, ad: false },
+};
+/** Boost time can stack up to this many hours. */
+export const BOOST_MAX_HOURS = 4;
+
+/** Missions shown at the same time. */
+export const MISSION_SLOTS = 3;
+/** Mission targets grow by this fraction per completed mission. */
+export const MISSION_GROWTH = 0.08;
+
+/** Daily reward cycle (7 days). Gold is given as minutes of income. */
+export type DailyReward =
+  | { kind: 'gold'; minutes: number }
+  | { kind: 'rubies'; amount: number }
+  | { kind: 'boost'; boost: BoostId; minutes: number };
+export const DAILY_REWARDS: DailyReward[] = [
+  { kind: 'gold', minutes: 5 },
+  { kind: 'rubies', amount: 5 },
+  { kind: 'boost', boost: 'doubleHaul', minutes: 30 },
+  { kind: 'gold', minutes: 30 },
+  { kind: 'rubies', amount: 10 },
+  { kind: 'boost', boost: 'goldenTide', minutes: 30 },
+  { kind: 'rubies', amount: 25 },
+];

@@ -46,6 +46,10 @@ en zeldzame vissen verzamelen voor de Marine Atlas.
 - Goudvissen (8 seconden zichtbaar, meer met radar), trofeeën, Marine Atlas met 3D-previews
 - Offline inkomsten (GDD-curve 80% / 50% / 10%, met een limiet van 12 uur) en ×3 voor rubies
 - Opslaan in de telefoon, tutorial-tips, geluidseffecten, trillen
+- **Je vissersbedrijf in beeld**: elke visser vaart in een eigen boot (roeiboot → vissersboot → trawler → galjoen → magisch schip),
+  vist rond het eiland en lost kratten in de haven; de haven groeit mee
+- **Verslavende lussen**: 3 missies tegelijk, dagelijkse beloning (7-daagse reeks), boosts (2× goud, 2× tikkracht, 3× goudvissen),
+  combo-meter met Frenzy (8 s dubbele schade), kritieke treffers, Lucky catches (×3 goud), drijvende schatkisten en flessenpost
 
 ## Balans: wijzigingen ten opzichte van de sheet
 

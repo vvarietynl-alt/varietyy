@@ -1,8 +1,21 @@
-import { type CatchableRarity, GOLDFISH_LIFETIME, isBossZone } from '../data/balance';
+import {
+  type CatchableRarity,
+  COMBO_FOR_FRENZY,
+  COMBO_WINDOW,
+  CRIT_CHANCE,
+  CRIT_MULT,
+  FRENZY_DAMAGE_MULT,
+  FRENZY_GOLDFISH_MULT,
+  FRENZY_SECONDS,
+  GOLDFISH_LIFETIME,
+  isBossZone,
+  TREASURE_INTERVAL,
+  TREASURE_LIFETIME,
+} from '../data/balance';
 import { bossSpecies, type FishSpecies } from '../data/fish';
 import { BossFight } from './bossFight';
 import { autoDps, bossHp, fishHp, goldfishPerMinute, rollRarity, tapDamage } from './economy';
-import type { Game } from './game';
+import type { ChestReward, Game } from './game';
 
 /**
  * The sea around the island: the player's boat, fish schools, goldfish and
@@ -53,6 +66,15 @@ export interface Goldfish {
   ttl: number;
 }
 
+export interface Treasure {
+  id: number;
+  kind: 'chest' | 'bottle';
+  x: number;
+  z: number;
+  ttl: number;
+  heading: number;
+}
+
 export interface BossEntity {
   species: FishSpecies;
   bossIndex: number;
@@ -71,12 +93,17 @@ export interface Boat {
 
 export type WorldEvent =
   | { type: 'hooked'; fish: FishEntity }
-  | { type: 'hit'; x: number; z: number; damage: number; crit?: boolean }
+  | { type: 'hit'; x: number; z: number; damage: number; crit: boolean }
   | { type: 'caught'; fish: FishEntity }
   | { type: 'select'; fish: FishEntity }
   | { type: 'goldfish-spawn'; goldfish: Goldfish }
   | { type: 'goldfish-collected'; goldfish: Goldfish; gold: number }
   | { type: 'goldfish-expired'; goldfish: Goldfish }
+  | { type: 'treasure-spawn'; treasure: Treasure }
+  | { type: 'treasure-opened'; treasure: Treasure; reward: ChestReward }
+  | { type: 'treasure-expired'; treasure: Treasure }
+  | { type: 'frenzy-start' }
+  | { type: 'frenzy-end' }
   | { type: 'boss-start'; boss: BossEntity; fight: BossFight }
   | { type: 'boss-mini-hit'; hit: boolean }
   | { type: 'boss-won'; boss: BossEntity }
@@ -88,7 +115,15 @@ let nextId = 1;
 export class FishingWorld {
   fish: FishEntity[] = [];
   goldfish: Goldfish[] = [];
+  treasures: Treasure[] = [];
   boss: BossEntity | null = null;
+  /** Taps in quick succession; fills the frenzy meter. */
+  combo = 0;
+  /** Seconds of frenzy left (0 = none). */
+  frenzy = 0;
+  private time = 0;
+  private lastTap = -10;
+  private treasureTimer = 40;
   fight: BossFight | null = null;
   boat: Boat;
   targetId: number | null = null;
@@ -127,6 +162,7 @@ export class FishingWorld {
     this.zone = zone;
     this.fish = [];
     this.goldfish = [];
+    this.treasures = [];
     this.targetId = null;
     this.nextTargetId = null;
     this.fight = null;
@@ -185,8 +221,15 @@ export class FishingWorld {
   // --- Input -------------------------------------------------------------------
 
   /** Tap on the sea at world position (x, z). */
-  tapAt(x: number, z: number): 'goldfish' | 'boss' | 'mini' | 'select' | 'hit' | 'none' {
+  tapAt(x: number, z: number): 'goldfish' | 'treasure' | 'boss' | 'mini' | 'select' | 'hit' | 'none' {
     this.game.state.stats.taps++;
+    const tr = this.treasures.find((o) => Math.hypot(o.x - x, o.z - z) < GOLDFISH_RADIUS);
+    if (tr) {
+      this.treasures = this.treasures.filter((o) => o !== tr);
+      const reward = this.game.openChest();
+      this.emit({ type: 'treasure-opened', treasure: tr, reward });
+      return 'treasure';
+    }
     const gf = this.goldfish.find((g) => Math.hypot(g.x - x, g.z - z) < GOLDFISH_RADIUS);
     if (gf) {
       this.goldfish = this.goldfish.filter((g) => g !== gf);
@@ -218,9 +261,11 @@ export class FishingWorld {
     if (this.fight && !this.fight.over) return this.tapBoss();
     const t = this.target;
     if (!t || t.state !== 'hooked') return 'none';
-    const dmg = tapDamage(this.game.state.upgrades);
+    this.bumpCombo();
+    const crit = this.rnd() < CRIT_CHANCE;
+    const dmg = tapDamage(this.game.state.upgrades) * this.game.tapDamageMult * (this.frenzy > 0 ? FRENZY_DAMAGE_MULT : 1) * (crit ? CRIT_MULT : 1);
     t.hp -= dmg;
-    this.emit({ type: 'hit', x: t.x, z: t.z, damage: dmg });
+    this.emit({ type: 'hit', x: t.x, z: t.z, damage: dmg, crit });
     if (t.hp <= 0) this.catchFish(t);
     return 'hit';
   }
@@ -232,10 +277,26 @@ export class FishingWorld {
       this.emit({ type: 'boss-mini-hit', hit });
       return 'mini';
     }
-    const dmg = tapDamage(this.game.state.upgrades);
+    const crit = this.rnd() < CRIT_CHANCE;
+    const dmg = tapDamage(this.game.state.upgrades) * this.game.tapDamageMult * (crit ? CRIT_MULT : 1);
     fight.tap(dmg);
-    if (this.boss) this.emit({ type: 'hit', x: this.boss.x, z: this.boss.z, damage: dmg });
+    if (this.boss) this.emit({ type: 'hit', x: this.boss.x, z: this.boss.z, damage: dmg, crit });
     return 'boss';
+  }
+
+  private bumpCombo(): void {
+    this.combo = this.time - this.lastTap < COMBO_WINDOW ? this.combo + 1 : 1;
+    this.lastTap = this.time;
+    if (this.frenzy <= 0 && this.combo >= COMBO_FOR_FRENZY) {
+      this.frenzy = FRENZY_SECONDS;
+      this.combo = 0;
+      this.emit({ type: 'frenzy-start' });
+    }
+  }
+
+  /** 0..1 fill of the frenzy meter. */
+  get comboFill(): number {
+    return this.frenzy > 0 ? this.frenzy / FRENZY_SECONDS : Math.min(1, this.combo / COMBO_FOR_FRENZY);
   }
 
   private setTarget(f: FishEntity): void {
@@ -261,6 +322,16 @@ export class FishingWorld {
     this.syncZone();
     const band = zoneBand(this.zone);
     const u = this.game.state.upgrades;
+    this.time += dt;
+    if (this.frenzy > 0) {
+      this.frenzy -= dt;
+      if (this.frenzy <= 0) {
+        this.frenzy = 0;
+        this.emit({ type: 'frenzy-end' });
+      }
+    }
+    if (this.time - this.lastTap > COMBO_WINDOW * 1.5) this.combo = Math.max(0, this.combo - dt * 25);
+    this.updateTreasure(dt);
 
     // keep the school full
     if (!this.boss && this.fish.length < FISH_PER_ZONE && this.rnd() < dt * 0.8) this.spawnFish();
@@ -300,7 +371,7 @@ export class FishingWorld {
     }
 
     // goldfish
-    const gpm = goldfishPerMinute(this.zone, u.radar);
+    const gpm = goldfishPerMinute(this.zone, u.radar) * this.game.goldfishMult * (this.frenzy > 0 ? FRENZY_GOLDFISH_MULT : 1);
     if (gpm > 0 && !this.fight && this.goldfish.length < 2 && this.rnd() < (gpm / 60) * dt) {
       const a = this.boat.heading + (this.rnd() - 0.5) * 2.4;
       const d = 6 + this.rnd() * 6;
@@ -314,6 +385,38 @@ export class FishingWorld {
 
     if (this.boss) this.updateBoss(dt, band.center);
     else this.updateFishing(dt, band);
+  }
+
+  private updateTreasure(dt: number): void {
+    this.treasureTimer -= dt;
+    if (this.treasureTimer <= 0 && !this.fight && this.treasures.length === 0) {
+      this.treasureTimer = TREASURE_INTERVAL[0] + this.rnd() * (TREASURE_INTERVAL[1] - TREASURE_INTERVAL[0]);
+      // the camera looks north from the south, so place it within the visible area around the boat
+      const side = this.rnd() < 0.5 ? -1 : 1;
+      const t: Treasure = {
+        id: nextId++,
+        kind: this.rnd() < 0.5 ? 'chest' : 'bottle',
+        x: this.boat.x + side * (3 + this.rnd() * 4),
+        z: this.boat.z - 2 + this.rnd() * 8,
+        ttl: TREASURE_LIFETIME,
+        heading: this.rnd() * Math.PI * 2,
+      };
+      // keep it off the island
+      const r = Math.hypot(t.x, t.z);
+      if (r < ISLAND_RADIUS + 4) {
+        t.x *= (ISLAND_RADIUS + 4) / r;
+        t.z *= (ISLAND_RADIUS + 4) / r;
+      }
+      this.treasures.push(t);
+      this.emit({ type: 'treasure-spawn', treasure: t });
+    }
+    for (const t of this.treasures) {
+      t.ttl -= dt;
+      t.x += Math.sin(t.heading) * 0.4 * dt;
+      t.z += Math.cos(t.heading) * 0.4 * dt;
+    }
+    for (const t of this.treasures.filter((o) => o.ttl <= 0)) this.emit({ type: 'treasure-expired', treasure: t });
+    this.treasures = this.treasures.filter((o) => o.ttl > 0);
   }
 
   private updateFishing(dt: number, band: { inner: number; outer: number; center: number }): void {

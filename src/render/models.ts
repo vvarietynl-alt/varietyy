@@ -741,3 +741,44 @@ export function createCrate(): THREE.Mesh {
   const c = mesh(new THREE.BoxGeometry(0.6, 0.45, 0.6), 0xc8924f);
   return c;
 }
+
+export function createTreasureChest(): THREE.Group {
+  const g = new THREE.Group();
+  const base = mesh(new THREE.BoxGeometry(1.2, 0.6, 0.8), 0x9a5b2a);
+  base.position.y = 0.3;
+  g.add(base);
+  const lid = mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.2, 6, 1, false, 0, Math.PI), 0xb06a32);
+  lid.rotation.z = Math.PI / 2;
+  lid.position.y = 0.6;
+  g.add(lid);
+  for (const x of [-0.45, 0.45]) {
+    const band = mesh(new THREE.BoxGeometry(0.1, 0.65, 0.84), 0xffc928, { metalness: 0.5, roughness: 0.4 });
+    band.position.set(x, 0.32, 0);
+    g.add(band);
+  }
+  const lock = mesh(new THREE.BoxGeometry(0.2, 0.22, 0.06), 0xffe066, { emissive: 0xffb000 });
+  lock.position.set(0, 0.55, 0.42);
+  g.add(lock);
+  return g;
+}
+
+export function createBottle(): THREE.Group {
+  const g = new THREE.Group();
+  const glass = mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.9, 7), 0x8fe3c8, { transparent: true, opacity: 0.7, roughness: 0.1 });
+  glass.rotation.z = Math.PI / 2;
+  glass.position.y = 0.25;
+  g.add(glass);
+  const neck = mesh(new THREE.CylinderGeometry(0.1, 0.22, 0.35, 7), 0x8fe3c8, { transparent: true, opacity: 0.7, roughness: 0.1 });
+  neck.rotation.z = -Math.PI / 2;
+  neck.position.set(0.6, 0.25, 0);
+  g.add(neck);
+  const cork = mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.16, 6), 0xb5835a);
+  cork.rotation.z = Math.PI / 2;
+  cork.position.set(0.84, 0.25, 0);
+  g.add(cork);
+  const paper = mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.6, 6), 0xfff1c9);
+  paper.rotation.z = Math.PI / 2;
+  paper.position.y = 0.25;
+  g.add(paper);
+  return g;
+}

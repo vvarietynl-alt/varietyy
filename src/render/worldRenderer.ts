@@ -5,7 +5,7 @@ import { type FishEntity, type FishingWorld, ISLAND_RADIUS, ZONE_WIDTH, zoneBand
 import type { Game } from '../game/game';
 import type { Fleet } from '../game/fleet';
 import { FleetRenderer } from './fleet';
-import { type BoatModel, type BuildingId, createBoat, createFish, createIsland, createRock, flat } from './models';
+import { type BoatModel, type BuildingId, createBoat, createBottle, createFish, createIsland, createRock, createTreasureChest, flat } from './models';
 import { createOcean } from './ocean';
 
 const RARITY_SIZE: Record<CatchableRarity, number> = { common: 0.85, rare: 1.0, endangered: 1.15, legendary: 1.4 };
@@ -39,6 +39,7 @@ export class WorldRenderer {
   private island: THREE.Group;
   private fishMeshes = new Map<number, THREE.Group>();
   private goldMeshes = new Map<number, THREE.Group>();
+  private treasureMeshes = new Map<number, THREE.Group>();
   private bossMesh: THREE.Group | null = null;
   private bossKey = '';
   private jumpers: Jumper[] = [];
@@ -133,6 +134,14 @@ export class WorldRenderer {
           break;
         case 'goldfish-collected':
           this.splash(e.goldfish.x, e.goldfish.z, 18, 0xffd23f);
+          break;
+        case 'treasure-opened':
+          this.splash(e.treasure.x, e.treasure.z, 26, 0xffd23f, 1.2);
+          this.shake = 0.25;
+          break;
+        case 'frenzy-start':
+          this.shake = 0.3;
+          this.splash(this.world.boat.x, this.world.boat.z, 30, 0xff8a3d, 1.1);
           break;
         case 'boss-mini-hit':
           if (e.hit) this.shake = 0.35;
@@ -229,6 +238,7 @@ export class WorldRenderer {
     this.fleetRenderer.update(dt);
     this.syncFish(dt);
     this.syncGoldfish();
+    this.syncTreasure();
     this.syncBoss(dt);
     this.updateMarkers();
     this.updateJumpers(dt);
@@ -325,6 +335,43 @@ export class WorldRenderer {
     for (const [id, m] of this.goldMeshes) {
       if (!alive.has(id)) {
         this.goldMeshes.delete(id);
+        this.scene.remove(m);
+      }
+    }
+  }
+
+  private syncTreasure(): void {
+    const alive = new Set<number>();
+    for (const t of this.world.treasures) {
+      alive.add(t.id);
+      let m = this.treasureMeshes.get(t.id);
+      if (!m) {
+        m = new THREE.Group();
+        const obj = t.kind === 'chest' ? createTreasureChest() : createBottle();
+        obj.name = 'obj';
+        m.add(obj);
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(1.4, 1.8, 24),
+          new THREE.MeshBasicMaterial({ color: 0xfff1a8, transparent: true, opacity: 0.8, depthWrite: false }),
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.12;
+        ring.name = 'ring';
+        m.add(ring);
+        this.treasureMeshes.set(t.id, m);
+        this.scene.add(m);
+      }
+      m.position.set(t.x, this.waveHeight(t.x, t.z) - 0.15, t.z);
+      const obj = m.getObjectByName('obj')!;
+      obj.rotation.set(Math.sin(this.time * 1.8 + t.id) * 0.18, t.heading + this.time * 0.2, Math.cos(this.time * 1.4) * 0.15);
+      const ring = m.getObjectByName('ring') as THREE.Mesh;
+      ring.scale.setScalar(1 + Math.sin(this.time * 4) * 0.1);
+      (ring.material as THREE.MeshBasicMaterial).opacity = Math.min(0.85, t.ttl / 2);
+      if (Math.random() < 0.08) this.splash(t.x + (Math.random() - 0.5), t.z + (Math.random() - 0.5), 1, 0xffe066, 0.6);
+    }
+    for (const [id, m] of this.treasureMeshes) {
+      if (!alive.has(id)) {
+        this.treasureMeshes.delete(id);
         this.scene.remove(m);
       }
     }
@@ -466,6 +513,8 @@ export class WorldRenderer {
     this.fishMeshes.clear();
     for (const m of this.goldMeshes.values()) this.scene.remove(m);
     this.goldMeshes.clear();
+    for (const m of this.treasureMeshes.values()) this.scene.remove(m);
+    this.treasureMeshes.clear();
   }
 
   /** Small 3D preview of a species for the Atlas (rendered once to a data URL). */

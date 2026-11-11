@@ -1,4 +1,9 @@
 import {
+  BOOST_MAX_HOURS,
+  BOOSTS,
+  type BoostId,
+  LUCKY_CATCH_CHANCE,
+  LUCKY_CATCH_MULT,
   catchesToUnlockNext,
   type CatchableRarity,
   isBossZone,
@@ -11,6 +16,7 @@ import {
 } from '../data/balance';
 import { bossSpecies, goldfishSpecies, speciesFor, type FishSpecies } from '../data/fish';
 import {
+  bestFishingZone,
   bossGold,
   fishermanBulkCost,
   fishGold,
@@ -19,12 +25,15 @@ import {
   nextLevelPrice,
   offlineEarnings,
   upgradeCost,
+  zoneAverageGold,
   zoneUnlockPrice,
 } from './economy';
 import { type GameState, newGame } from './state';
 
 export type GameEvent =
-  | { type: 'catch'; species: FishSpecies; gold: number; firstTime: boolean; trophy: boolean }
+  | { type: 'catch'; species: FishSpecies; gold: number; firstTime: boolean; trophy: boolean; lucky: boolean }
+  | { type: 'chest'; reward: ChestReward }
+  | { type: 'boost'; boost: BoostId; minutes: number }
   | { type: 'goldfish'; species: FishSpecies; gold: number }
   | { type: 'boss-defeated'; species: FishSpecies; gold: number; levelComplete: boolean }
   | { type: 'zone-unlocked'; zone: number }
@@ -34,6 +43,11 @@ export type GameEvent =
   | { type: 'toast'; text: string };
 
 export type Listener = (e: GameEvent) => void;
+
+export type ChestReward =
+  | { kind: 'gold'; amount: number }
+  | { kind: 'rubies'; amount: number }
+  | { kind: 'boost'; boost: BoostId; minutes: number };
 
 export type UnlockStatus =
   | { kind: 'maxed' }
@@ -48,11 +62,82 @@ const TROPHY_CHANCE: Partial<Record<CatchableRarity, number>> = { endangered: 0.
 export class Game {
   state: GameState;
   private listeners = new Set<Listener>();
-  /** Temporary income multiplier (boosts); 1 = none. */
-  incomeMult = 1;
+  /** Clock for boosts (injectable for tests). */
+  now: () => number = Date.now;
 
   constructor(state: GameState = newGame(), private rnd: () => number = Math.random) {
     this.state = state;
+  }
+
+  // --- Boosts -------------------------------------------------------------------
+
+  boostSecondsLeft(id: BoostId): number {
+    return Math.max(0, (this.state.boosts[id] - this.now()) / 1000);
+  }
+
+  isBoostActive(id: BoostId): boolean {
+    return this.boostSecondsLeft(id) > 0;
+  }
+
+  /** Add boost time (stacks up to BOOST_MAX_HOURS). */
+  activateBoost(id: BoostId, minutes: number): void {
+    const start = Math.max(this.now(), this.state.boosts[id]);
+    const max = this.now() + BOOST_MAX_HOURS * 3600e3;
+    this.state.boosts[id] = Math.min(max, start + minutes * 60e3);
+    this.emit({ type: 'boost', boost: id, minutes });
+  }
+
+  buyBoost(id: BoostId): boolean {
+    const def = BOOSTS[id];
+    if (this.state.rubies < def.rubyCost) return false;
+    this.state.rubies -= def.rubyCost;
+    this.activateBoost(id, def.minutes);
+    return true;
+  }
+
+  /** Gold multiplier for fish (Double Haul). */
+  get incomeMult(): number {
+    return this.isBoostActive('doubleHaul') ? 2 : 1;
+  }
+
+  get tapDamageMult(): number {
+    return this.isBoostActive('strongArms') ? 2 : 1;
+  }
+
+  get goldfishMult(): number {
+    return this.isBoostActive('goldenTide') ? 3 : 1;
+  }
+
+  /**
+   * Rough gold per second of a playing player (fleet, or about one fish every
+   * 6 seconds early on). Used to size rewards so they stay meaningful.
+   */
+  get incomeEstimate(): number {
+    const s = this.state;
+    return Math.max(this.incomePerSecond, (zoneAverageGold(s.level, bestFishingZone(s.unlockedZone)) * this.incomeMult) / 6);
+  }
+
+  rewardGold(minutes: number): number {
+    return this.incomeEstimate * 60 * minutes;
+  }
+
+  /** Floating treasure chest / message in a bottle. */
+  openChest(): ChestReward {
+    const roll = this.rnd();
+    let reward: ChestReward;
+    if (roll < 0.12) reward = { kind: 'rubies', amount: 2 + Math.floor(this.rnd() * 4) };
+    else if (roll < 0.22) reward = { kind: 'boost', boost: 'doubleHaul', minutes: 5 };
+    else reward = { kind: 'gold', amount: this.rewardGold(1 + this.rnd() * 2) };
+    this.grant(reward);
+    this.state.stats.chestsOpened++;
+    this.emit({ type: 'chest', reward });
+    return reward;
+  }
+
+  grant(reward: ChestReward): void {
+    if (reward.kind === 'gold') this.addGold(reward.amount);
+    else if (reward.kind === 'rubies') this.state.rubies += reward.amount;
+    else this.activateBoost(reward.boost, reward.minutes);
   }
 
   on(fn: Listener): () => void {
@@ -92,7 +177,9 @@ export class Game {
   recordCatch(species: FishSpecies, zone: number): void {
     const s = this.state;
     const rarity = species.rarity as CatchableRarity;
-    const gold = fishGold(s.level, zone, rarity);
+    const lucky = this.rnd() < LUCKY_CATCH_CHANCE;
+    const gold = fishGold(s.level, zone, rarity) * this.incomeMult * (lucky ? LUCKY_CATCH_MULT : 1);
+    if (rarity !== 'common') s.stats.rareCaught++;
     const firstTime = !s.atlas[species.id];
     s.atlas[species.id] = (s.atlas[species.id] ?? 0) + 1;
     s.zoneCatches[zone] = (s.zoneCatches[zone] ?? 0) + 1;
@@ -100,12 +187,12 @@ export class Game {
     const trophy = this.rnd() < (TROPHY_CHANCE[rarity] ?? 0);
     if (trophy) s.trophies++;
     this.addGold(gold);
-    this.emit({ type: 'catch', species, gold, firstTime, trophy });
+    this.emit({ type: 'catch', species, gold, firstTime, trophy, lucky });
   }
 
   collectGoldfish(): number {
     const s = this.state;
-    const gold = goldfishGold(s.level, s.activeZone, this.incomePerSecond);
+    const gold = goldfishGold(s.level, s.activeZone, this.incomePerSecond) * this.incomeMult;
     const species = goldfishSpecies(s.level);
     s.atlas[species.id] = (s.atlas[species.id] ?? 0) + 1;
     s.stats.goldfishCaught++;
@@ -152,6 +239,7 @@ export class Game {
     if (st.kind !== 'ready') return false;
     this.state.gold -= st.price;
     this.state.unlockedZone++;
+    this.state.stats.zonesUnlocked++;
     this.emit({ type: 'zone-unlocked', zone: this.state.unlockedZone });
     this.setActiveZone(this.state.unlockedZone);
     return true;
@@ -204,6 +292,7 @@ export class Game {
     if (!this.canBuyUpgrade(id)) return false;
     this.state.gold -= this.upgradeCost(id);
     this.state.upgrades[id]++;
+    this.state.stats.upgradesBought++;
     this.emit({ type: 'purchase' });
     return true;
   }
@@ -219,6 +308,7 @@ export class Game {
     if (this.state.gold < cost) return false;
     this.state.gold -= cost;
     this.state.fishermen[tier] += count;
+    this.state.stats.fishermenHired += count;
     this.emit({ type: 'purchase' });
     return true;
   }

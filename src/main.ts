@@ -4,7 +4,8 @@ import '@fontsource/baloo-2/800.css';
 import { Audio, vibrate } from './audio';
 import { FishingWorld } from './game/fishing';
 import { BOAT_CLASS_NAMES, boatClassFor, Fleet } from './game/fleet';
-import { FISHERMAN_NAMES } from './data/balance';
+import { BOOSTS, FISHERMAN_NAMES } from './data/balance';
+import { canClaimDaily, ensureMissions } from './game/missions';
 import { formatNumber } from './game/format';
 import { Game } from './game/game';
 import { loadState, newGame, SAVE_KEY, serializeState } from './game/state';
@@ -50,10 +51,12 @@ const panels = new PanelManager(uiRoot, {
   game,
   preview: (sp) => renderer.renderPreview(sp),
   sfx,
+  reward: (text) => overlay.rewardPop(text),
   onClose: () => {},
   confirmReset: () => hud.confirmReset(() => {
     try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
     game.state = newGame();
+    ensureMissions(game);
     fleet.reset();
     renderer.fleetRenderer.reset();
     panels.close();
@@ -82,6 +85,10 @@ game.on((e) => {
   switch (e.type) {
     case 'catch': {
       lastCatchGold = e.gold;
+      if (e.lucky) {
+        const t = world.target ?? world.boat;
+        overlay.floatLucky(t.x, t.z);
+      }
       const special = e.species.rarity !== 'common';
       sfx(special ? 'rare' : 'catch');
       vibrate(special ? 40 : 15, game.state.settings.haptics);
@@ -101,6 +108,9 @@ game.on((e) => {
       if (e.levelComplete) setTimeout(() => hud.showLevelComplete(game.state.level), 1200);
       save();
       break;
+    case 'boost':
+      hud.toast([`⚡ ${BOOSTS[e.boost].name} +${e.minutes} min`], true);
+      break;
     case 'zone-unlocked':
       hud.toast([`🗺️ Zone ${e.zone} unlocked!`], true);
       save();
@@ -118,8 +128,23 @@ game.on((e) => {
 world.on((e) => {
   switch (e.type) {
     case 'hit':
-      overlay.floatDamage(e.x, e.z, e.damage);
-      sfx('tap');
+      overlay.floatDamage(e.x, e.z, e.damage, e.crit);
+      sfx(e.crit ? 'mini' : 'tap');
+      break;
+    case 'treasure-spawn':
+      hud.toast([e.treasure.kind === 'chest' ? '🧰 A treasure chest is floating by — tap it!' : '🍾 A message in a bottle — tap it!'], true);
+      break;
+    case 'treasure-opened': {
+      const r = e.reward;
+      sfx('goldfish');
+      vibrate(40, game.state.settings.haptics);
+      overlay.rewardPop(r.kind === 'gold' ? `🧰 +${formatNumber(r.amount)} gold` : r.kind === 'rubies' ? `🧰 +${r.amount} rubies!` : `🧰 ${BOOSTS[r.boost].name} ${r.minutes} min!`);
+      break;
+    }
+    case 'frenzy-start':
+      sfx('win');
+      vibrate(60, game.state.settings.haptics);
+      overlay.rewardPop('🔥 FRENZY! ×2 damage');
       break;
     case 'caught':
       overlay.floatGold(e.fish.x, e.fish.z, lastCatchGold);
@@ -197,7 +222,17 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', save);
 setInterval(save, 5000);
+ensureMissions(game);
 checkOffline();
+
+// Offer the daily reward once per session, after the player has started fishing.
+let dailyOffered = false;
+setInterval(() => {
+  if (dailyOffered || !canClaimDaily(game) || game.state.stats.fishCaught < 3) return;
+  if (panels.current || hud.modalOpen || world.fight) return;
+  dailyOffered = true;
+  panels.open('daily');
+}, 1000);
 
 // --- Main loop ----------------------------------------------------------------------------
 

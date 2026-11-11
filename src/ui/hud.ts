@@ -1,4 +1,5 @@
-import { isBossZone, LEVEL_COUNT, OFFLINE_TRIPLE_RUBY_COST, ZONES_PER_LEVEL } from '../data/balance';
+import { BOOSTS, type BoostId, isBossZone, LEVEL_COUNT, OFFLINE_TRIPLE_RUBY_COST, ZONES_PER_LEVEL } from '../data/balance';
+import { canClaimDaily, claimableMissions } from '../game/missions';
 import { bossSpecies, LEVEL_THEMES } from '../data/fish';
 import { fishermanCost, upgradeCost, zoneUnlockPrice } from '../game/economy';
 import type { FishingWorld } from '../game/fishing';
@@ -33,11 +34,17 @@ export class Hud {
   private hintEl: HTMLElement | null = null;
   private hintText = '';
   private modal: HTMLElement | null = null;
+  private boostChips = h('div', { class: 'boost-chips' });
+  private boostKey = '';
+  private sideBadges: { missions: HTMLElement; daily: HTMLElement; boosts: HTMLElement };
+  private combo = h('div', { class: 'combo', style: 'display:none' });
+  private comboFill = h('div', { class: 'cfill' });
+  private comboLabel = h('div', { class: 'clabel' });
 
   constructor(private ui: HTMLElement, private game: Game, private world: FishingWorld, private panels: PanelManager, private host: HudHost) {
     const s = () => game.state;
     const hud = h('div', { class: 'hud' },
-      h('div', { class: 'hud-left' }, this.levelEl),
+      h('div', { class: 'hud-left' }, this.levelEl, this.boostChips),
       h('div', { class: 'gold-box' }, h('div', { class: 'amount' }, coin(), this.goldEl), this.rateEl),
       h('div', { class: 'hud-right' },
         pressButton({ class: 'pill' }, () => this.openPanel('shop'), ruby(), this.rubyEl),
@@ -68,7 +75,54 @@ export class Hud {
       this.badges.set(id, badge);
       dock.append(btn);
     }
-    ui.append(hud, this.zonebar, this.nextZone, this.toasts, dock);
+    const side = h('div', { class: 'side' });
+    const sideBtn = (id: 'missions' | 'daily' | 'boosts', icon: string, label: string) => {
+      const badge = h('i', { class: 'badge', style: 'display:none' });
+      side.append(pressButton({ class: 'side-btn', 'aria-label': label }, () => { host.sfx('click'); this.openPanel(id); }, icon, h('span', null, label), badge));
+      return badge;
+    };
+    this.sideBadges = { missions: sideBtn('missions', '📜', 'Missions'), daily: sideBtn('daily', '🎁', 'Daily'), boosts: sideBtn('boosts', '⚡', 'Boost') };
+    this.combo.append(h('div', { class: 'ctrack' }, this.comboFill), this.comboLabel);
+    ui.append(hud, this.zonebar, this.nextZone, side, this.combo, this.toasts, dock);
+  }
+
+  private updateSide(): void {
+    const g = this.game;
+    const show = (el: HTMLElement, text: string) => {
+      const want = text ? '' : 'none';
+      if (el.style.display !== want) el.style.display = want;
+      setText(el, text);
+    };
+    const claim = claimableMissions(g);
+    show(this.sideBadges.missions, claim > 0 ? String(claim) : '');
+    show(this.sideBadges.daily, canClaimDaily(g) ? '!' : '');
+    const active = (Object.keys(BOOSTS) as BoostId[]).filter((id) => g.isBoostActive(id));
+    show(this.sideBadges.boosts, active.length ? String(active.length) : '');
+
+    // active boost chips with timers
+    const key = active.join();
+    if (key !== this.boostKey) {
+      this.boostKey = key;
+      this.boostChips.replaceChildren(...active.map((id) => h('div', { class: 'pill boost', 'data-id': id })));
+    }
+    for (const el of Array.from(this.boostChips.children) as HTMLElement[]) {
+      const id = el.dataset.id as BoostId;
+      const icon = id === 'doubleHaul' ? '💰×2' : id === 'strongArms' ? '💪×2' : '✨×3';
+      setText(el, `${icon} ${formatDuration(g.boostSecondsLeft(id))}`);
+    }
+
+    // combo / frenzy meter
+    const fight = !!this.world.fight && !this.world.fight.over;
+    const visible = !fight && (this.world.frenzy > 0 || this.world.combo >= 3);
+    const want = visible ? '' : 'none';
+    if (this.combo.style.display !== want) this.combo.style.display = want;
+    if (visible) {
+      this.comboFill.style.height = `${this.world.comboFill * 100}%`;
+      const frenzy = this.world.frenzy > 0;
+      this.combo.classList.toggle('on', frenzy);
+      setText(this.comboLabel, frenzy ? 'FRENZY ×2' : `×${Math.floor(this.world.combo)}`);
+    }
+    document.getElementById('app')!.classList.toggle('frenzy', this.world.frenzy > 0);
   }
 
   openPanel(id: PanelId): void {
@@ -95,6 +149,7 @@ export class Hud {
     this.nextZone.style.display = fighting ? 'none' : '';
     this.updateNextZone();
     this.updateBadges();
+    this.updateSide();
     this.updateHint();
     this.dockButtons.get('island')!.classList.toggle('active', this.host.isIslandMode());
     for (const [id, btn] of this.dockButtons) if (id !== 'island') btn.classList.toggle('active', this.panels.current === id);

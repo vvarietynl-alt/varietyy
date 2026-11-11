@@ -99,12 +99,24 @@ export class Overlay {
     }
   }
 
-  floatDamage(x: number, z: number, dmg: number): void {
+  floatDamage(x: number, z: number, dmg: number, crit = false): void {
     const now = performance.now();
-    if (now - this.lastFloat < 60) return; // keep fast tapping readable
+    if (!crit && now - this.lastFloat < 60) return; // keep fast tapping readable
     this.lastFloat = now;
     const p = this.renderer.toScreen(x + (Math.random() - 0.5) * 1.5, 1.6, z);
-    this.spawn(h('div', { class: 'float dmg' }, `-${formatNumber(dmg)}`), p.x, p.y);
+    this.spawn(h('div', { class: crit ? 'float crit' : 'float dmg' }, crit ? `CRIT -${formatNumber(dmg)}` : `-${formatNumber(dmg)}`), p.x, p.y);
+  }
+
+  floatLucky(x: number, z: number): void {
+    const p = this.renderer.toScreen(x, 3.2, z);
+    this.spawn(h('div', { class: 'float lucky' }, '🍀 LUCKY ×3'), p.x, p.y);
+  }
+
+  /** Big centred reward message. */
+  rewardPop(text: string): void {
+    const el = h('div', { class: 'reward-pop' }, text);
+    this.root.append(el);
+    el.addEventListener('animationend', () => el.remove());
   }
 
   floatGold(x: number, z: number, gold: number, big = false): void {

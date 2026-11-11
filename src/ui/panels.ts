@@ -9,6 +9,9 @@ import {
   type UpgradeId,
   ZONES_PER_LEVEL,
   AD_RUBY_REWARD,
+  BOOSTS,
+  type BoostId,
+  DAILY_REWARDS,
 } from '../data/balance';
 import { ALL_SPECIES, bossSpecies, LEVEL_THEMES, type FishSpecies } from '../data/fish';
 import {
@@ -26,18 +29,20 @@ import {
   zoneUnlockPrice,
 } from '../game/economy';
 import { BOAT_CLASS_NAMES, boatClassFor, boatsForTier, MAX_FLEET_BOATS } from '../game/fleet';
-import { formatNumber } from '../game/format';
+import { formatDuration, formatNumber } from '../game/format';
+import { canClaimDaily, claimDaily, claimMission, dailyStreak, ensureMissions, missionDone, missionLabel, missionProgress, nextDailyIndex, skipMission } from '../game/missions';
 import type { Game } from '../game/game';
 import type { BuildingId } from '../render/models';
 import { coin, h, pressButton, ruby, setDisabled, setText } from './dom';
 
-export type PanelId = BuildingId | 'atlas' | 'shop' | 'settings';
+export type PanelId = BuildingId | 'atlas' | 'shop' | 'settings' | 'missions' | 'daily' | 'boosts';
 type Updater = () => void;
 
 export interface PanelHost {
   game: Game;
   preview(species: FishSpecies): string;
   sfx(name: 'buy' | 'click' | 'error'): void;
+  reward(text: string): void;
   onClose(): void;
   confirmReset(): void;
 }
@@ -51,12 +56,15 @@ interface PanelDef {
   build: (body: HTMLElement) => Updater[];
 }
 
+const BOOST_ICONS: Record<BoostId, string> = { doubleHaul: '💰', strongArms: '💪', goldenTide: '✨' };
+
 const FISHERMAN_ICONS = ['🧒', '🎣', '🧑', '🧔', '👨‍✈️', '🦸', '🤿', '🧭', '👑', '💡', '✨', '🎯', '🦀', '🌊', '🧙', '⚔️', '🌍', '⚓', '🏴‍☠️', '🪸', '💪', '🛡️', '⭐', '🐙', '🔮'];
 
 export class PanelManager {
   current: PanelId | null = null;
   private root: HTMLElement | null = null;
   private body: HTMLElement | null = null;
+  private titleEl: HTMLElement | null = null;
   private updaters: Updater[] = [];
   private builtKey = '';
   private defs: Record<PanelId, PanelDef>;
@@ -80,6 +88,7 @@ export class PanelManager {
       h('header', null, h('span', { class: 'ico' }, def.icon), title, pressButton({ class: 'close', 'aria-label': 'Close' }, () => this.close(), '✕')),
       body,
     );
+    this.titleEl = title;
     this.root = h('div', { class: 'sheet-backdrop', onpointerdown: (e: Event) => { if (e.target === this.root) this.close(); } }, sheet);
     this.body = body;
     this.container.append(this.root);
@@ -109,6 +118,7 @@ export class PanelManager {
     if (!this.current || !this.body) return;
     const def = this.defs[this.current];
     const scroll = this.body.scrollTop;
+    if (this.titleEl) this.titleEl.replaceChildren(def.title(), def.subtitle ? h('small', null, def.subtitle()) : '');
     this.body.replaceChildren();
     this.builtKey = def.key?.() ?? '';
     this.updaters = def.build(this.body);
@@ -391,6 +401,103 @@ export class PanelManager {
             h('p', { class: 'note' }, `Use rubies to triple offline earnings (up to ${OFFLINE_CAP_HOURS} h). Purchases go live with Google Play Billing.`),
           );
           return [() => setText(r, String(s().rubies))];
+        },
+      },
+
+      missions: {
+        icon: '📜',
+        title: () => 'Missions',
+        subtitle: () => `Completed: ${s().stats.missionsDone}`,
+        key: () => { ensureMissions(game); return s().missions.map((m) => m.id).join(); },
+        build: (body) => {
+          const ups: Updater[] = [];
+          ensureMissions(game);
+          for (const m of s().missions) {
+            const fill = h('div', { class: 'fill' });
+            const count = h('small');
+            const claim = pressButton({ class: 'btn gold small' }, () => {
+              const r = claimMission(game, m.id);
+              if (r) {
+                this.host.sfx('buy');
+                this.host.reward(`+${formatNumber(r.gold)} gold · +${r.rubies} rubies`);
+              } else this.host.sfx('error');
+            }, 'Claim');
+            const skip = pressButton({ class: 'btn small', style: 'background:var(--panel-2);color:var(--ink);box-shadow:0 3px 0 var(--line)' }, () => { skipMission(game, m.id); this.host.sfx('click'); }, '↻');
+            body.append(h('div', { class: 'row' },
+              h('div', { class: 'ico' }, '🎯'),
+              h('div', { class: 'info' },
+                h('b', null, missionLabel(m)),
+                h('div', { class: 'progress' }, fill),
+                count,
+              ),
+              h('div', { class: 'buy' }, claim, skip),
+            ));
+            ups.push(() => {
+              const p = missionProgress(game, m);
+              const done = missionDone(game, m);
+              fill.style.width = `${(p / m.target) * 100}%`;
+              setText(count, done ? `Done! Reward: ${formatNumber(game.rewardGold(m.rewardMinutes))} gold + ${m.rewardRubies} 💎` : `${formatNumber(p)} / ${formatNumber(m.target)} · reward ${m.rewardRubies} 💎 + gold`);
+              setDisabled(claim, !done);
+              claim.classList.toggle('pulse', done);
+              skip.style.display = done ? 'none' : '';
+            });
+          }
+          body.append(h('p', { class: 'note' }, 'New missions appear as soon as you claim one. Tap ↻ to swap a mission.'));
+          return ups;
+        },
+      },
+
+      daily: {
+        icon: '🎁',
+        title: () => 'Daily Reward',
+        subtitle: () => `Streak: ${dailyStreak(game)} ${dailyStreak(game) === 1 ? 'day' : 'days'}`,
+        key: () => `${s().daily.lastClaimDay}`,
+        build: (body) => {
+          const idx = nextDailyIndex(game);
+          const claimable = canClaimDaily(game);
+          const grid = h('div', { class: 'daily-grid' });
+          DAILY_REWARDS.forEach((r, i) => {
+            const label = r.kind === 'gold' ? `${r.minutes} min of gold` : r.kind === 'rubies' ? `${r.amount} rubies` : `${BOOSTS[r.boost].name} ${r.minutes}m`;
+            const icon = r.kind === 'gold' ? '🪙' : r.kind === 'rubies' ? '💎' : BOOST_ICONS[r.boost];
+            const state = i < idx || (!claimable && i === idx) ? 'claimed' : i === idx ? 'today' : '';
+            grid.append(h('div', { class: `daily-card ${state}${i === 6 ? ' big' : ''}` }, h('small', null, `Day ${i + 1}`), h('div', { class: 'dico' }, state === 'claimed' ? '✅' : icon), h('span', null, label)));
+          });
+          const btn = pressButton({ class: 'btn gold wide' + (claimable ? ' pulse' : '') }, () => {
+            const r = claimDaily(game);
+            if (!r) return this.host.sfx('error');
+            this.host.sfx('buy');
+            this.host.reward(r.kind === 'gold' ? 'Gold collected!' : r.kind === 'rubies' ? `+${r.amount} rubies` : `${BOOSTS[r.boost].name} active!`);
+          }, claimable ? 'Collect today\'s reward' : 'Come back tomorrow');
+          setDisabled(btn, !claimable);
+          body.append(grid, h('div', { style: 'margin-top:12px' }, btn), h('p', { class: 'note' }, 'Come back every day — day 7 gives 25 rubies. Missing a day restarts at day 1.'));
+          return [];
+        },
+      },
+
+      boosts: {
+        icon: '⚡',
+        title: () => 'Boosts',
+        subtitle: () => 'Speed things up for a while',
+        build: (body) => {
+          const ups: Updater[] = [];
+          for (const def of Object.values(BOOSTS)) {
+            const left = h('small', { class: 'lvl' });
+            const buyBtn = pressButton({ class: 'btn gold small' }, () => this.host.sfx(game.buyBoost(def.id) ? 'buy' : 'error'), `${def.rubyCost} `, ruby());
+            const buttons = h('div', { class: 'buy' }, buyBtn);
+            if (def.ad) buttons.append(pressButton({ class: 'btn blue small' }, () => { game.activateBoost(def.id, def.minutes); this.host.sfx('buy'); }, '📺 Free'));
+            body.append(h('div', { class: 'row' },
+              h('div', { class: 'ico' }, BOOST_ICONS[def.id]),
+              h('div', { class: 'info' }, h('b', null, def.name), h('small', null, `${def.description} · ${def.minutes} min`), left),
+              buttons,
+            ));
+            ups.push(() => {
+              const sec = game.boostSecondsLeft(def.id);
+              setText(left, sec > 0 ? `Active: ${formatDuration(sec)} left` : '');
+              setDisabled(buyBtn, s().rubies < def.rubyCost);
+            });
+          }
+          body.append(h('p', { class: 'note' }, 'Boost time stacks (up to 4 hours) and keeps running while you are away. 📺 = watch an ad (test mode).'));
+          return ups;
         },
       },
 
