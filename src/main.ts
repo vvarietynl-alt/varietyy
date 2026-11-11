@@ -12,6 +12,7 @@ import { loadState, newGame, SAVE_KEY, serializeState } from './game/state';
 import { WorldRenderer } from './render/worldRenderer';
 import { Ads } from './services/ads';
 import { Billing } from './services/billing';
+import { Analytics, LocalAnalytics } from './services/analytics';
 import { TestAdProvider, TestBillingProvider } from './ui/testAd';
 import { coin, h } from './ui/dom';
 import { Hud } from './ui/hud';
@@ -37,6 +38,13 @@ const renderer = new WorldRenderer(canvas, world, game, fleet);
 const audio = new Audio();
 const ads = new Ads(game, new TestAdProvider(uiRoot));
 const billing = new Billing(game, new TestBillingProvider(uiRoot));
+const playtest = new LocalAnalytics();
+const analytics = new Analytics(playtest, () => game.state.stats.playSeconds / 60);
+playtest.startSession();
+analytics.track('session_start');
+ads.onEvent = (event, placement) => (event === 'ad_watched' ? analytics.milestone(event, placement) : analytics.track(event, placement));
+const sessionStart = performance.now();
+setInterval(() => playtest.updateSession((performance.now() - sessionStart) / 60000), 15000);
 
 function save(): void {
   game.state.lastSeen = Date.now();
@@ -60,6 +68,8 @@ const panels = new PanelManager(uiRoot, {
   ads,
   billing,
   toast: (text) => hud.toast([text]),
+  analytics,
+  playtest,
   onClose: () => {},
   confirmVoyage: () => {
     const pearls = game.pearlsForVoyage;
@@ -104,6 +114,33 @@ const overlay = new Overlay(overlayRoot, world, renderer);
 
 /** Gold of the last catch, for the floating number (game 'catch' fires before world 'caught'). */
 let lastCatchGold = 0;
+
+// Funnel analytics
+game.on((e) => {
+  switch (e.type) {
+    case 'catch':
+      analytics.milestone('first_catch');
+      if (e.species.rarity !== 'common') analytics.milestone('first', e.species.rarity);
+      if (game.state.stats.fishCaught === 50 || game.state.stats.fishCaught === 250) analytics.milestone('fish_caught', game.state.stats.fishCaught);
+      break;
+    case 'gift-fisherman': analytics.milestone('free_fisherman'); break;
+    case 'zone-unlocked': analytics.milestone('zone', `L${game.state.level}-z${e.zone}`); break;
+    case 'level-changed': analytics.milestone('level', e.level); break;
+    case 'boss-defeated': analytics.milestone('boss_win', `L${game.state.level}-${e.species.bossIndex}`); break;
+    case 'voyage': analytics.milestone('voyage', game.state.voyages); break;
+    case 'starter-offer': analytics.milestone('starter_offer_shown'); break;
+    case 'purchase-granted': analytics.milestone('iap', e.product); break;
+    case 'atlas-set': analytics.milestone('atlas_set', e.key); break;
+    case 'chest': analytics.track('chest'); break;
+  }
+});
+world.on((e) => {
+  if (e.type === 'boss-start') analytics.track('boss_start', `L${game.state.level}`);
+  if (e.type === 'boss-lost') analytics.track('boss_lose', `L${game.state.level}`);
+  if (e.type === 'boss-continue-offer') analytics.track('boss_continue_offer');
+  if (e.type === 'sea-event-start') analytics.track('sea_event', e.kind);
+  if (e.type === 'frenzy-start') analytics.milestone('first_frenzy');
+});
 
 game.on((e) => {
   switch (e.type) {
@@ -294,6 +331,7 @@ if (!(game.state.tutorialStep & 4) && game.state.stats.fishCaught === 0) {
     e.stopPropagation();
     audio.unlock();
     game.state.tutorialStep |= 4;
+    analytics.milestone('start_screen_tap');
     start.classList.add('out');
     setTimeout(() => start.remove(), 500);
   } },
@@ -318,6 +356,7 @@ if (!(game.state.tutorialStep & 4) && game.state.stats.fishCaught === 0) {
     e.stopPropagation();
     audio.unlock();
     game.state.tutorialStep |= 4;
+    analytics.milestone('start_screen_tap');
     start.classList.add('out');
     setTimeout(() => start.remove(), 500);
   } },

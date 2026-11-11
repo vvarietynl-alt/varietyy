@@ -26,6 +26,7 @@ import {
   RUBY_ADS_PER_DAY,
 } from '../data/balance';
 import type { Billing } from '../services/billing';
+import type { Analytics, LocalAnalytics } from '../services/analytics';
 import type { Ads } from '../services/ads';
 import { ALL_SPECIES, bossSpecies, themeFor, type FishSpecies } from '../data/fish';
 import {
@@ -64,6 +65,8 @@ export interface PanelHost {
   ads: Ads;
   billing: Billing;
   toast(text: string): void;
+  analytics: Analytics;
+  playtest: LocalAnalytics;
 }
 
 interface PanelDef {
@@ -111,6 +114,7 @@ export class PanelManager {
 
   open(id: PanelId): void {
     this.close(false);
+    this.host.analytics.milestone('open', id);
     this.current = id;
     if (id === 'atlas') this.atlasLevel = Math.min(10, this.host.game.state.level);
     const def = this.defs[id];
@@ -649,6 +653,7 @@ export class PanelManager {
             const claim = pressButton({ class: 'btn gold small' }, () => {
               const r = claimMission(game, m.id);
               if (r) {
+                this.host.analytics.milestone('mission_claim', s().stats.missionsDone);
                 this.host.sfx('buy');
                 this.host.reward(`+${formatNumber(r.gold)} gold · +${r.rubies} rubies`);
               } else this.host.sfx('error');
@@ -717,6 +722,7 @@ export class PanelManager {
           const btn = pressButton({ class: 'btn gold wide' + (claimable ? ' pulse' : '') }, () => {
             const r = claimDaily(game);
             if (!r) return this.host.sfx('error');
+            this.host.analytics.milestone('daily_claim', `day${s().daily.streak}`);
             this.host.sfx('buy');
             this.host.reward(r.kind === 'gold' ? 'Gold collected!' : r.kind === 'rubies' ? `+${r.amount} rubies` : `${BOOSTS[r.boost].name} active!`);
           }, claimable ? 'Collect today\'s reward' : 'Come back tomorrow');
@@ -780,6 +786,7 @@ export class PanelManager {
               h('span', null, 'Bosses ', h('b', null, String(st.bossesDefeated))),
               h('span', null, 'Total gold ', h('b', null, formatNumber(st.totalGold))),
             ),
+            this.playtestStats(),
             pressButton({ class: 'btn red wide' }, () => this.host.confirmReset(), 'Reset progress'),
             h('p', { class: 'note' }, 'Whale Hunter v0.1 — prototype'),
           );
@@ -787,6 +794,24 @@ export class PanelManager {
         },
       },
     };
+  }
+
+  /** Playtest stats: funnel milestones and counts, for testers to screenshot. */
+  private playtestStats(): HTMLElement {
+    const d = this.host.playtest.data;
+    const count = (prefix: string) => Object.entries(d.counts).filter(([k]) => k.startsWith(prefix)).reduce((a, [, n]) => a + n, 0);
+    const box = h('details', { class: 'playtest' },
+      h('summary', null, '📊 Playtest stats'),
+      h('div', { class: 'summary' },
+        h('span', null, 'Sessions ', h('b', null, String(d.sessions))),
+        h('span', null, 'Session minutes ', h('b', null, d.sessionMinutes.slice(-5).join(', ') || '-')),
+        h('span', null, 'Bosses won/tried ', h('b', null, `${count('boss_win')}/${count('boss_start')}`)),
+        h('span', null, 'Ads watched ', h('b', null, String(count('ad_watched')))),
+      ),
+      h('ol', { class: 'milestones' }, ...d.milestones.slice(-40).map((m) => h('li', null, h('b', null, `${m.minute} min`), ` ${m.event}`, m.session > 1 ? ` (session ${m.session})` : ''))),
+      pressButton({ class: 'btn ghost small' }, () => { this.host.playtest.reset(); this.rebuild(); }, 'Clear stats'),
+    );
+    return box;
   }
 
   private amountFor(tier: number): number {

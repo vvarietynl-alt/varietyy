@@ -515,3 +515,9 @@ button { font-family: inherit; color: inherit; border: 0; cursor: pointer; }
 .start-logo p { margin: 4px 0 0; font-weight: 700; font-size: 16px; opacity: 0.95; }
 .start-tap { font-weight: 800; font-size: 20px; animation: pulse 1.2s ease-in-out infinite; text-shadow: 0 2px 0 rgba(0,0,0,0.3); }
 @keyframes whaleBob { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-12px) rotate(4deg); } }
+
+/* ---------- playtest stats ---------- */
+.playtest { background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 8px 12px; margin: 8px 0 12px; }
+.playtest summary { font-weight: 800; cursor: pointer; }
+.playtest .milestones { margin: 6px 0 8px; padding-left: 22px; font-size: 13px; max-height: 220px; overflow-y: auto; }
+.playtest .milestones b { font-variant-numeric: tabular-nums; }

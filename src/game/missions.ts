@@ -72,7 +72,7 @@ function createMission(g: Game, rnd: () => number): Mission {
     target,
     base: s.stats[t.stat],
     rewardRubies: rnd() < 0.4 ? 2 : 1,
-    rewardMinutes: 4 + Math.round(rnd() * 4),
+    rewardMinutes: 2 + Math.round(rnd() * 2),
   };
 }
 

@@ -53,17 +53,33 @@ function averageHp(level: number, zone: number): number {
   return fishHp(level, zone, 'common') * (zone >= 6 ? 1.25 : zone >= 2 ? 1.1 : 1);
 }
 
+/**
+ * Extra income a real player gets on top of fishing and the fleet, measured
+ * in "income estimate" seconds per second (see Game.incomeEstimate):
+ * treasure chests (~2 min of income every ~112 s) and missions (~3 min of
+ * income roughly every 3 minutes). Sea events add ~5% to fish gold.
+ */
+const CHEST_BONUS = 120 / 112.5;
+const MISSION_BONUS = 1.0;
+const EVENT_FISH_BONUS = 1.055;
+const LUCKY_FISH_BONUS = 1.1; // 5% chance of ×3
+const CRIT_DAMAGE_BONUS = 1.16; // 8% chance of ×3
+
+function bonusIncome(): number {
+  return game.incomeEstimate * (CHEST_BONUS + MISSION_BONUS);
+}
+
 function activeIncome(): number {
   const zone = bestFishingZone(s.unlockedZone);
   const dps = playerDps();
   const secondsPerFish = TRAVEL_SECONDS / boatSpeedMult(s.upgrades.engine) + averageHp(s.level, zone) / dps;
-  const fishIncome = (zoneAverageGold(s.level, zone) * game.incomeMult) / secondsPerFish;
+  const fishIncome = (zoneAverageGold(s.level, zone) * game.incomeMult * EVENT_FISH_BONUS * LUCKY_FISH_BONUS) / secondsPerFish;
   const goldfish = (goldfishPerMinute(zone, s.upgrades.radar) / 60) * 0.7 * goldfishGold(s.level, zone, game.incomePerSecond);
-  return fishIncome + goldfish;
+  return fishIncome + goldfish + bonusIncome();
 }
 
 function playerDps(): number {
-  return tapDamage(s.upgrades) * game.tapDamageMult * SIM_TAPS_PER_SECOND + autoDps(s.upgrades);
+  return tapDamage(s.upgrades) * game.tapDamageMult * CRIT_DAMAGE_BONUS * SIM_TAPS_PER_SECOND + autoDps(s.upgrades);
 }
 
 function canBeatBoss(bossIndex: number): boolean {

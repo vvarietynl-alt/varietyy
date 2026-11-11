@@ -3,6 +3,7 @@ import {
   AUTO_GEAR_GROWTH,
   BOSS_GOLD_MULT,
   BOSS_HP_MULT,
+  BOSS_LEVEL_HP_GROWTH,
   CATCHABLE_RARITIES,
   type CatchableRarity,
   FISHERMAN_BASE_COST,
@@ -191,7 +192,8 @@ export function nextLevelPrice(level: number): number {
 
 export function bossHp(level: number, bossIndex: number): number {
   const zoneInFront = bossIndex === 0 ? 4 : 9;
-  return levelBaseHp(level) * ZONE_HP_MULT[fishingZoneOrdinal(zoneInFront)] * BOSS_HP_MULT[bossIndex];
+  const levelFactor = 1 + BOSS_LEVEL_HP_GROWTH * (Math.min(level, 10) - 1);
+  return levelBaseHp(level) * ZONE_HP_MULT[fishingZoneOrdinal(zoneInFront)] * BOSS_HP_MULT[bossIndex] * levelFactor;
 }
 
 export function bossGold(level: number, bossIndex: number): number {

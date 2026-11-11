@@ -24,6 +24,8 @@ export interface AdProvider {
 
 export class Ads {
   private busy = false;
+  /** Optional listener for analytics. */
+  onEvent?: (event: 'ad_started' | 'ad_watched' | 'ad_skipped', placement: AdPlacement) => void;
 
   constructor(private game: Game, private provider: AdProvider) {}
 
@@ -46,7 +48,9 @@ export class Ads {
     }
     this.busy = true;
     try {
+      this.onEvent?.('ad_started', placement);
       const ok = await this.provider.showRewarded(placement);
+      this.onEvent?.(ok ? 'ad_watched' : 'ad_skipped', placement);
       if (ok) {
         this.game.recordAdWatched();
         reward();

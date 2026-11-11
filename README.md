@@ -104,6 +104,13 @@ Resultaat van de simulatie (constant actief spelen, slimme aankopen): level 1 �
 - Aankopen via `src/services/billing.ts` (testmodus: bevestiging, niets afgeschreven; in de Android-app Google Play Billing)
 - Speeltest-optie: `?timescale=8` speelt de game 8× versneld (alleen voor testen)
 
+## Playtest-analytics
+
+`src/services/analytics.ts` houdt bij hoe ver spelers komen en wanneer: startscherm, eerste vangst, eerste zeldzame vis,
+gratis visser, elke zone en elk level, bosses (gewonnen/verloren), nieuwe reis, aankopen, bekeken reclame, geopende
+schermen, missies, dagbeloning en sessielengte. Testers zien dit onder **Instellingen → 📊 Playtest stats** en kunnen er
+een screenshot van sturen. In de Play Store-versie stuur je dezelfde gebeurtenissen naar bijv. Firebase Analytics.
+
 ## Rubies en beloonde reclame
 
 - **Reclame alleen vrijwillig, op momenten dat het iets oplevert** (max. 12 per dag):

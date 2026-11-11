@@ -121,7 +121,7 @@ export const ZONE_PRICES: number[][] = [
 export const ZONE_PRICE_CURVE = [1, 0.3, 0.45, 0.65, 1, 1.25, 1.5, 1.8];
 /** Extra discount for the very first zones of the game. */
 export const FIRST_LEVEL_ZONE_DISCOUNT = [1, 0.5, 0.7, 0.85, 1, 1, 1, 1];
-export const LEVEL_PRICE_MULT = [90, 636, 933, 2843, 3976, 4387, 8340, 14020, 10084, 3177];
+export const LEVEL_PRICE_MULT: number[] = JSON.parse(globalThis.process?.env?.WH_LPM ?? '[90, 636, 933, 2843, 3976, 4387, 8340, 14020, 10084, 3177]');
 /** Fish the player must catch in a zone before the next zone can be bought. */
 export function catchesToUnlockNext(zone: number): number {
   return 6 + fishingZoneOrdinal(zone) * 2;
@@ -269,6 +269,11 @@ export const BOSS_MINIGAME_SPEED_STEP = 0.18;
 export const BOSS_MINIGAME_GREEN_SIZE = 0.2; // fraction of the bar
 /** Boss HP = common fish HP of the zone in front of it × this. */
 export const BOSS_HP_MULT = [16, 26];
+/**
+ * Bosses get relatively stronger per level (+12% per level up to level 10,
+ * ×2.08 there). Playtest: a good player beat every boss at the first try.
+ */
+export const BOSS_LEVEL_HP_GROWTH = 0.12;
 /** Boss reward = zone-1 fish value of the level × this. Sheet: ≈15× and 22×. */
 export const BOSS_GOLD_MULT = [40, 80];
 
