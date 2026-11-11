@@ -1,5 +1,6 @@
-import { BOOSTS, type BoostId, isBossZone, OFFLINE_TRIPLE_RUBY_COST, PRESTIGE_MIN_LEVEL, ZONES_PER_LEVEL } from '../data/balance';
+import { BOOSTS, type BoostId, BOSS_CONTINUE_RUBIES, BOSS_CONTINUE_SECONDS, DOUBLE_OFFER_SECONDS, isBossZone, OFFLINE_TRIPLE_RUBY_COST, PRESTIGE_MIN_LEVEL, ZONES_PER_LEVEL } from '../data/balance';
 import { canClaimDaily, claimableMissions } from '../game/missions';
+import type { Ads } from '../services/ads';
 import { bossSpecies, themeFor } from '../data/fish';
 import { fishermanCost, upgradeCost, zoneUnlockPrice } from '../game/economy';
 import type { FishingWorld } from '../game/fishing';
@@ -12,6 +13,7 @@ export interface HudHost {
   toggleIsland(): void;
   isIslandMode(): boolean;
   sfx(name: 'click' | 'buy' | 'error'): void;
+  ads: Ads;
 }
 
 type DockId = 'island' | 'researchCenter' | 'fishingWorkshop' | 'boatWorkshop' | 'fishermenSchool' | 'atlas';
@@ -38,6 +40,8 @@ export class Hud {
   private hintText = '';
   private modal: HTMLElement | null = null;
   private boostChips = h('div', { class: 'boost-chips' });
+  private doubleOffer: HTMLElement | null = null;
+  private adBoostBtn: HTMLButtonElement;
   private boostKey = '';
   private sideBadges: { missions: HTMLElement; daily: HTMLElement; boosts: HTMLElement; voyage: HTMLElement };
   private combo = h('div', { class: 'combo', style: 'display:none' });
@@ -91,7 +95,10 @@ export class Hud {
     this.sideBadges.voyage = v.badge;
     this.voyageBtn = v.btn;
     this.combo.append(h('div', { class: 'ctrack' }, this.comboFill), this.comboLabel);
-    ui.append(hud, this.zonebar, this.nextZone, side, this.combo, this.toasts, dock);
+    this.adBoostBtn = pressButton({ class: 'ad-boost' }, () => {
+      void host.ads.watch('boost-double-haul', () => { game.activateBoost('doubleHaul', BOOSTS.doubleHaul.minutes); host.sfx('buy'); });
+    }, '');
+    ui.append(hud, this.zonebar, this.nextZone, side, this.combo, this.toasts, this.adBoostBtn, dock);
   }
 
   private updateSide(): void {
@@ -113,6 +120,11 @@ export class Hud {
     this.pearlPill.style.display = st.pearlsEarned > 0 ? '' : 'none';
     setText(this.pearlEl, formatNumber(st.pearls));
     const active = (Object.keys(BOOSTS) as BoostId[]).filter((id) => g.isBoostActive(id));
+    // free 2× gold through an ad, when not active (hidden during boss fights and in the first minutes)
+    const showAdBoost = this.host.ads.available && !g.isBoostActive('doubleHaul') && st.stats.fishCaught >= 15 && !(this.world.fight && !this.world.fight.over);
+    const wantAd = showAdBoost ? '' : 'none';
+    if (this.adBoostBtn.style.display !== wantAd) this.adBoostBtn.style.display = wantAd;
+    setText(this.adBoostBtn, `${this.host.ads.icon} 2× gold ${BOOSTS.doubleHaul.minutes}m`);
     show(this.sideBadges.boosts, active.length ? String(active.length) : '');
 
     // active boost chips with timers
@@ -289,12 +301,16 @@ export class Hud {
   }
 
   showOffline(gold: number, seconds: number, countedSeconds: number): void {
+    const ads = this.host.ads;
     this.showModal((close) => {
+      const done = () => { this.host.sfx('buy'); close(); };
+      const adBtn = pressButton({ class: 'btn blue wide' }, () => {
+        void ads.watch('offline-double', () => { this.game.claimOffline(gold, 'double'); done(); });
+      }, `${ads.icon} Double it! ×2 — watch an ad`);
+      setDisabled(adBtn, !ads.available);
       const tripleBtn = pressButton({ class: 'btn gold wide' }, () => {
-        if (this.game.claimOffline(gold, true)) {
-          this.host.sfx('buy');
-          close();
-        } else this.host.sfx('error');
+        if (this.game.claimOffline(gold, 'triple')) done();
+        else this.host.sfx('error');
       }, `Triple it! ×3 for ${OFFLINE_TRIPLE_RUBY_COST} `, ruby());
       setDisabled(tripleBtn, this.game.state.rubies < OFFLINE_TRIPLE_RUBY_COST);
       return [
@@ -303,11 +319,51 @@ export class Hud {
         h('p', null, `Your fishermen kept fishing for ${formatDuration(countedSeconds)}${countedSeconds < seconds ? ` (max ${formatDuration(countedSeconds)})` : ''}.`),
         h('div', { class: 'big' }, coin(), formatNumber(gold)),
         h('div', { class: 'actions' },
+          adBtn,
           tripleBtn,
-          pressButton({ class: 'btn wide' }, () => { this.game.claimOffline(gold, false); this.host.sfx('buy'); close(); }, 'Collect'),
+          pressButton({ class: 'btn wide' }, () => { this.game.claimOffline(gold, 'normal'); done(); }, 'Collect'),
         ),
       ];
     });
+  }
+
+  /** The boss is almost down but time ran out: offer extra time. */
+  showBossContinue(bossName: string, hpLeft: number, onAccept: () => void, onDecline: () => void): void {
+    const ads = this.host.ads;
+    this.showModal((close) => {
+      const accept = () => { close(); onAccept(); };
+      const adBtn = pressButton({ class: 'btn blue wide' }, () => { void ads.watch('boss-continue', accept); }, `${ads.icon} +${BOSS_CONTINUE_SECONDS} seconds — watch an ad`);
+      setDisabled(adBtn, !ads.available);
+      const rubyBtn = pressButton({ class: 'btn gold wide' }, () => {
+        if (this.game.spendRubies(BOSS_CONTINUE_RUBIES)) accept();
+        else this.host.sfx('error');
+      }, `+${BOSS_CONTINUE_SECONDS} seconds for ${BOSS_CONTINUE_RUBIES} `, ruby());
+      setDisabled(rubyBtn, this.game.state.rubies < BOSS_CONTINUE_RUBIES);
+      return [
+        h('div', { class: 'emoji' }, '⏱️'),
+        h('h2', null, 'So close!'),
+        h('p', null, `${bossName} has only ${Math.ceil(hpLeft * 100)}% stamina left. Keep fighting?`),
+        h('div', { class: 'actions' },
+          adBtn,
+          rubyBtn,
+          pressButton({ class: 'btn ghost wide' }, () => { close(); onDecline(); }, 'Let it escape'),
+        ),
+      ];
+    });
+  }
+
+  /** Short "double it" offer after a reward (treasure, goldfish). */
+  offerDouble(label: string, placement: 'double-treasure' | 'double-goldfish', reward: () => void): void {
+    const ads = this.host.ads;
+    if (!ads.available) return;
+    this.doubleOffer?.remove();
+    const el = pressButton({ class: 'double-offer' }, () => {
+      el.remove();
+      void ads.watch(placement, () => { reward(); this.host.sfx('buy'); });
+    }, `${ads.icon} ${label}`);
+    this.doubleOffer = el;
+    this.ui.append(el);
+    setTimeout(() => el.remove(), DOUBLE_OFFER_SECONDS * 1000);
   }
 
   showLevelComplete(level: number): void {
@@ -327,7 +383,7 @@ export class Hud {
       h('div', { class: 'big' }, '🐚 +', formatNumber(pearls)),
       h('div', { class: 'actions' },
         pressButton({ class: 'btn gold wide' }, () => { close(); onConfirm(); }, 'Set sail!'),
-        pressButton({ class: 'btn wide' }, close, 'Not yet'),
+        pressButton({ class: 'btn ghost wide' }, close, 'Not yet'),
       ),
     ]);
   }
@@ -339,7 +395,7 @@ export class Hud {
       h('p', null, 'All gold, fishermen and atlas entries will be lost.'),
       h('div', { class: 'actions' },
         pressButton({ class: 'btn red wide' }, () => { close(); onConfirm(); }, 'Yes, reset'),
-        pressButton({ class: 'btn wide' }, close, 'Cancel'),
+        pressButton({ class: 'btn ghost wide' }, close, 'Cancel'),
       ),
     ]);
   }

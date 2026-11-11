@@ -211,7 +211,7 @@ describe('game rules', () => {
   it('triples offline gold for rubies', () => {
     const g = new Game(newGame());
     const rubies = g.state.rubies;
-    expect(g.claimOffline(100, true)).toBe(true);
+    expect(g.claimOffline(100, 'triple')).toBe(true);
     expect(g.state.gold).toBe(300);
     expect(g.state.rubies).toBe(rubies - 10);
   });

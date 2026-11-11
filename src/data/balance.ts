@@ -416,3 +416,57 @@ export const PEARL_UPGRADES: Record<PearlUpgradeId, PearlUpgradeDef> = {
   deepPockets: { id: 'deepPockets', name: 'Deep Pockets', description: '+2 h offline earnings', icon: '🌙', maxLevel: 12, baseCost: 8, costGrowth: 1.7 },
   pearlDiver: { id: 'pearlDiver', name: 'Pearl Diver', description: '+10% pearls from every voyage', icon: '🐚', maxLevel: 25, baseCost: 20, costGrowth: 1.9 },
 };
+
+// ---------------------------------------------------------------------------
+// Rewarded ads, ruby shop, cosmetics
+// ---------------------------------------------------------------------------
+/** Rewarded ads a player can watch per day (keeps them special). */
+export const AD_DAILY_LIMIT = 12;
+/** Extra boss time from an ad or rubies when the boss is almost down. */
+export const BOSS_CONTINUE_SECONDS = 15;
+export const BOSS_CONTINUE_RUBIES = 5;
+/** Offer a continue only when the boss has at most this much stamina left. */
+export const BOSS_CONTINUE_MAX_HP = 0.35;
+/** Seconds a "double it" offer stays on screen. */
+export const DOUBLE_OFFER_SECONDS = 6;
+
+export type PermanentId = 'goldenHull' | 'bigHooks' | 'goldenRadar' | 'nightShift' | 'manager';
+export interface PermanentDef { id: PermanentId; name: string; description: string; icon: string; rubies: number }
+/** One-time ruby purchases that last forever (they also survive a New Voyage). */
+export const PERMANENTS: Record<PermanentId, PermanentDef> = {
+  goldenHull: { id: 'goldenHull', name: 'Golden Hull', description: '2× gold from every fish, forever', icon: '🏆', rubies: 500 },
+  bigHooks: { id: 'bigHooks', name: 'Big Hooks', description: '2× tap damage, forever', icon: '🪝', rubies: 300 },
+  goldenRadar: { id: 'goldenRadar', name: 'Golden Radar', description: '2× more golden koi, forever', icon: '📡', rubies: 200 },
+  nightShift: { id: 'nightShift', name: 'Night Shift', description: '+12 h offline earnings, forever', icon: '🌙', rubies: 250 },
+  manager: { id: 'manager', name: 'Harbour Manager', description: 'Hires fishermen for you automatically', icon: '🧑‍💼', rubies: 400 },
+};
+
+/** Instant gold: hours of fleet income. */
+export const TIME_WARPS = [
+  { hours: 1, rubies: 20 },
+  { hours: 4, rubies: 60 },
+  { hours: 24, rubies: 250 },
+];
+
+/** Captain's Pass (real-money purchase later): rewards without ads + daily rubies. */
+export const CAPTAINS_PASS_DAILY_RUBIES = 10;
+
+export type BoatSkinId = 'classic' | 'ocean' | 'pirate' | 'neon' | 'golden';
+export interface BoatSkin { id: BoatSkinId; name: string; hull: number; trim: number; roof: number; glow?: number; rubies: number }
+export const BOAT_SKINS: Record<BoatSkinId, BoatSkin> = {
+  classic: { id: 'classic', name: 'Classic', hull: 0xd8392f, trim: 0xfaf6ee, roof: 0xd8392f, rubies: 0 },
+  ocean: { id: 'ocean', name: 'Ocean Blue', hull: 0x2e6fd8, trim: 0xf2f7ff, roof: 0x1f4fa8, rubies: 50 },
+  pirate: { id: 'pirate', name: 'Pirate Black', hull: 0x2a2a2a, trim: 0x8b1e1e, roof: 0x111111, rubies: 150 },
+  neon: { id: 'neon', name: 'Neon Night', hull: 0x3b1f6b, trim: 0x2de2e6, roof: 0xff3d9a, glow: 0x2de2e6, rubies: 200 },
+  golden: { id: 'golden', name: 'Golden Yacht', hull: 0xffc928, trim: 0xfff6d6, roof: 0xc98a00, glow: 0xffb000, rubies: 300 },
+};
+
+export type DecorId = 'flowers' | 'lanterns' | 'fountain' | 'statue' | 'flags';
+export interface DecorDef { id: DecorId; name: string; icon: string; rubies: number }
+export const DECOR: Record<DecorId, DecorDef> = {
+  flowers: { id: 'flowers', name: 'Flower garden', icon: '🌺', rubies: 40 },
+  flags: { id: 'flags', name: 'Company flags', icon: '🚩', rubies: 60 },
+  lanterns: { id: 'lanterns', name: 'Harbour lanterns', icon: '🏮', rubies: 80 },
+  fountain: { id: 'fountain', name: 'Fountain', icon: '⛲', rubies: 120 },
+  statue: { id: 'statue', name: 'Golden whale statue', icon: '🐋', rubies: 250 },
+};

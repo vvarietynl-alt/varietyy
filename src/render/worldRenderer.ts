@@ -5,7 +5,8 @@ import { type FishEntity, type FishingWorld, ISLAND_RADIUS, ZONE_WIDTH, zoneBand
 import type { Game } from '../game/game';
 import type { Fleet } from '../game/fleet';
 import { FleetRenderer } from './fleet';
-import { type BoatModel, type BuildingId, createBoat, createBottle, createFish, createIsland, createRock, createTreasureChest, flat } from './models';
+import { BOAT_SKINS, type DecorId } from '../data/balance';
+import { type BoatModel, type BuildingId, createBoat, createBottle, createDecor, createFish, createIsland, createRock, createTreasureChest, flat } from './models';
 import { createOcean } from './ocean';
 
 const RARITY_SIZE: Record<CatchableRarity, number> = { common: 0.85, rare: 1.0, endangered: 1.15, legendary: 1.4 };
@@ -35,6 +36,9 @@ export class WorldRenderer {
   private ocean: ReturnType<typeof createOcean>;
   private floor: THREE.Mesh;
   private boat: BoatModel;
+  private boatSkin = '';
+  private decor = new THREE.Group();
+  private decorKey = '';
   private buildings: Map<BuildingId, THREE.Object3D>;
   private island: THREE.Group;
   private fishMeshes = new Map<number, THREE.Group>();
@@ -94,6 +98,7 @@ export class WorldRenderer {
 
     this.boat = createBoat();
     this.scene.add(this.boat.group);
+    this.scene.add(this.decor);
 
     this.fleetRenderer = new FleetRenderer(this.scene, fleet, game, (x, z) => this.waveHeight(x, z), (x, z, n, c, sz) => this.splash(x, z, n, c, sz));
 
@@ -234,6 +239,7 @@ export class WorldRenderer {
     u.uIslandR.value = ISLAND_RADIUS;
     u.uZoneW.value = ZONE_WIDTH;
 
+    this.syncCosmetics();
     this.updateBoat(dt);
     this.fleetRenderer.update(dt);
     this.syncFish(dt);
@@ -245,6 +251,41 @@ export class WorldRenderer {
     this.updateParticles(dt);
     this.updateCamera(dt);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Rebuild the player boat when the skin changes, and place bought decorations. */
+  private syncCosmetics(): void {
+    const c = this.game.state.cosmetics;
+    if (c.boatSkin !== this.boatSkin) {
+      this.boatSkin = c.boatSkin;
+      this.scene.remove(this.boat.group);
+      this.boat = createBoat(BOAT_SKINS[c.boatSkin] ?? BOAT_SKINS.classic);
+      this.scene.add(this.boat.group);
+    }
+    const key = c.decor.join();
+    if (key !== this.decorKey) {
+      this.decorKey = key;
+      this.decor.clear();
+      const spots: Record<DecorId, [number, number, number]> = {
+        flowers: [1.2, 1.15, -0.8],
+        flags: [3.5, 1.15, 10.5],
+        lanterns: [-6.5, 1.15, 9.5],
+        fountain: [2.6, 1.15, 2.4],
+        statue: [-8.5, 1.15, -0.5],
+      };
+      for (const id of c.decor) {
+        const d = createDecor(id);
+        const [x, y, z] = spots[id];
+        d.position.set(x, y, z);
+        this.decor.add(d);
+      }
+    }
+    if (this.decor.children.length) {
+      this.decor.traverse((o) => {
+        if (o.userData.spin) o.rotation.y += 0.02;
+        if (o.userData.wave !== undefined) o.rotation.y = Math.sin(this.time * 3 + o.userData.wave) * 0.3;
+      });
+    }
   }
 
   private waveHeight(x: number, z: number): number {

@@ -254,8 +254,9 @@ export interface BoatModel {
   radar: THREE.Object3D;
 }
 
-export function createBoat(): BoatModel {
+export function createBoat(skin: { hull: number; trim: number; roof: number; glow?: number } = { hull: 0xd8392f, trim: 0xfaf6ee, roof: 0xd8392f }): BoatModel {
   const group = new THREE.Group();
+  const glow = skin.glow ? { emissive: skin.glow } : undefined;
   const hullShape = new THREE.Shape();
   // top view outline, bow at +y (becomes +z after rotation)
   hullShape.moveTo(0, 2.1);
@@ -266,22 +267,22 @@ export function createBoat(): BoatModel {
   hullShape.quadraticCurveTo(-1.05, 1.1, 0, 2.1);
   const lower = new THREE.ExtrudeGeometry(hullShape, { depth: 0.55, bevelEnabled: false, curveSegments: 3 });
   const upper = new THREE.ExtrudeGeometry(hullShape, { depth: 0.35, bevelEnabled: false, curveSegments: 3 });
-  const hullLow = mesh(lower, 0xd8392f);
+  const hullLow = mesh(lower, skin.hull, glow);
   hullLow.rotation.x = Math.PI / 2;
   hullLow.position.y = 0.15;
   hullLow.scale.set(0.92, 0.95, 1);
   group.add(hullLow);
-  const hullUp = mesh(upper, 0xfaf6ee);
+  const hullUp = mesh(upper, skin.trim, glow);
   hullUp.rotation.x = Math.PI / 2;
   hullUp.position.y = 0.5;
   group.add(hullUp);
   const deck = mesh(new THREE.BoxGeometry(1.5, 0.05, 2.6), 0xc58b52);
   deck.position.set(0, 0.52, -0.1);
   group.add(deck);
-  const cabin = mesh(new THREE.BoxGeometry(1.2, 0.9, 1.1), 0xfaf6ee);
+  const cabin = mesh(new THREE.BoxGeometry(1.2, 0.9, 1.1), skin.trim);
   cabin.position.set(0, 0.98, -0.55);
   group.add(cabin);
-  const roof = mesh(new THREE.BoxGeometry(1.4, 0.15, 1.3), 0xd8392f);
+  const roof = mesh(new THREE.BoxGeometry(1.4, 0.15, 1.3), skin.roof, glow);
   roof.position.set(0, 1.5, -0.55);
   group.add(roof);
   const window = mesh(new THREE.BoxGeometry(0.9, 0.35, 0.05), 0x3b5f7a);
@@ -290,7 +291,7 @@ export function createBoat(): BoatModel {
   const mast = mesh(new THREE.CylinderGeometry(0.05, 0.06, 2.2, 5), 0xe8e2d6);
   mast.position.set(0, 2.5, -0.55);
   group.add(mast);
-  const flag = mesh(new THREE.BoxGeometry(0.04, 0.35, 0.55), 0xd8392f);
+  const flag = mesh(new THREE.BoxGeometry(0.04, 0.35, 0.55), skin.roof);
   flag.position.set(0, 3.4, -0.85);
   group.add(flag);
 
@@ -780,5 +781,81 @@ export function createBottle(): THREE.Group {
   paper.rotation.z = Math.PI / 2;
   paper.position.y = 0.25;
   g.add(paper);
+  return g;
+}
+
+/** Island decorations bought in the ruby shop. */
+export function createDecor(id: 'flowers' | 'lanterns' | 'fountain' | 'statue' | 'flags'): THREE.Group {
+  const g = new THREE.Group();
+  switch (id) {
+    case 'flowers': {
+      const colors = [0xff5a8a, 0xffd23f, 0xff8a3d, 0xc77dff, 0xffffff];
+      for (let i = 0; i < 14; i++) {
+        const a = i * 2.4;
+        const r = 0.6 + (i % 4) * 0.45;
+        const stem = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.35, 3), 0x3f9e3f);
+        stem.position.set(Math.sin(a) * r, 0.17, Math.cos(a) * r);
+        g.add(stem);
+        const bloom = mesh(new THREE.IcosahedronGeometry(0.15, 0), colors[i % colors.length]);
+        bloom.position.set(Math.sin(a) * r, 0.4, Math.cos(a) * r);
+        g.add(bloom);
+      }
+      break;
+    }
+    case 'lanterns':
+      for (let i = 0; i < 4; i++) {
+        const post = mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.6, 5), 0x4a3a2a);
+        post.position.set((i - 1.5) * 1.6, 0.8, 0);
+        g.add(post);
+        const lamp = mesh(new THREE.OctahedronGeometry(0.22, 0), 0xffb347, { emissive: 0xff9a1a });
+        lamp.position.set((i - 1.5) * 1.6, 1.7, 0);
+        lamp.userData.spin = true;
+        g.add(lamp);
+      }
+      break;
+    case 'fountain': {
+      const basin = mesh(new THREE.CylinderGeometry(1.1, 1.2, 0.4, 10), 0xdfe6ea);
+      basin.position.y = 0.2;
+      g.add(basin);
+      const water = mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.1, 10), 0x5fc3e8, { emissive: 0x2a8fd0 });
+      water.position.y = 0.38;
+      g.add(water);
+      const column = mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.9, 6), 0xdfe6ea);
+      column.position.y = 0.8;
+      g.add(column);
+      const top = mesh(new THREE.ConeGeometry(0.35, 0.5, 8), 0x9fe3ff, { transparent: true, opacity: 0.8 });
+      top.position.y = 1.4;
+      top.rotation.x = Math.PI;
+      g.add(top);
+      break;
+    }
+    case 'statue': {
+      const plinth = mesh(new THREE.BoxGeometry(1.4, 0.6, 1.4), 0xdfe6ea);
+      plinth.position.y = 0.3;
+      g.add(plinth);
+      const gold = flat(0xffc928, { metalness: 0.7, roughness: 0.3, emissive: 0x7a5200 });
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 5), gold);
+      body.scale.set(0.7, 0.55, 1.4);
+      body.position.y = 1.15;
+      body.rotation.x = -0.4;
+      g.add(body);
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.4), gold);
+      tail.position.set(0, 1.9, -0.75);
+      tail.rotation.x = -0.9;
+      g.add(tail);
+      break;
+    }
+    case 'flags':
+      for (let i = 0; i < 3; i++) {
+        const pole = mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 5), 0xdddddd);
+        pole.position.set((i - 1) * 1.3, 1.2, 0);
+        g.add(pole);
+        const flag = mesh(new THREE.BoxGeometry(0.8, 0.5, 0.04), [0x2e8ee0, 0xffc928, 0xe8463a][i]);
+        flag.position.set((i - 1) * 1.3 + 0.42, 2.15, 0);
+        flag.userData.wave = i;
+        g.add(flag);
+      }
+      break;
+  }
   return g;
 }

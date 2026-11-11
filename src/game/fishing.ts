@@ -8,6 +8,8 @@ import {
   FRENZY_SECONDS,
   GOLDFISH_LIFETIME,
   isBossZone,
+  BOSS_CONTINUE_MAX_HP,
+  BOSS_CONTINUE_SECONDS,
   TREASURE_INTERVAL,
   TREASURE_LIFETIME,
 } from '../data/balance';
@@ -105,6 +107,7 @@ export type WorldEvent =
   | { type: 'frenzy-end' }
   | { type: 'boss-start'; boss: BossEntity; fight: BossFight }
   | { type: 'boss-mini-hit'; hit: boolean }
+  | { type: 'boss-continue-offer'; boss: BossEntity; fight: BossFight }
   | { type: 'boss-won'; boss: BossEntity }
   | { type: 'boss-lost'; boss: BossEntity }
   | { type: 'zone-reset' };
@@ -129,6 +132,8 @@ export class FishingWorld {
   nextTargetId: number | null = null;
   private zone = 0;
   private bossCooldown = 0;
+  /** The boss fight is paused while the player decides on extra time. */
+  continueOffer = false;
   private listeners = new Set<(e: WorldEvent) => void>();
 
   constructor(private game: Game, private rnd: () => number = Math.random) {
@@ -167,6 +172,7 @@ export class FishingWorld {
     this.fight = null;
     this.boss = null;
     this.bossCooldown = 0;
+    this.continueOffer = false;
     const s = this.game.state;
     if (isBossZone(zone)) {
       const bossIndex = zone === 5 ? 0 : 1;
@@ -474,8 +480,14 @@ export class FishingWorld {
       }
       return;
     }
+    if (this.continueOffer) return;
     fight.update(dt);
     fight.autoDamage(autoDps(u), dt);
+    if (fight.phase === 'lost' && !fight.continued && fight.hpFraction <= BOSS_CONTINUE_MAX_HP) {
+      this.continueOffer = true;
+      this.emit({ type: 'boss-continue-offer', boss, fight });
+      return;
+    }
     if (fight.phase === 'won') {
       this.fight = null;
       this.boss = null;
@@ -491,8 +503,22 @@ export class FishingWorld {
     }
   }
 
+  /** Player took the offer: more time for this fight. */
+  acceptContinue(): void {
+    if (!this.continueOffer || !this.fight) return;
+    this.continueOffer = false;
+    this.fight.extend(BOSS_CONTINUE_SECONDS);
+  }
+
+  /** Player declined: the boss escapes as usual on the next update. */
+  declineContinue(): void {
+    if (this.fight) this.fight.continued = true;
+    this.continueOffer = false;
+  }
+
   /** Ends a running boss fight early (e.g. the player sails away). */
   abandonFight(): void {
+    this.continueOffer = false;
     if (this.fight && this.boss) {
       this.fight = null;
       this.bossCooldown = 2;

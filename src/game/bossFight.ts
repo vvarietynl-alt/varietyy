@@ -43,6 +43,16 @@ export class BossFight {
     this.timeLeft = seconds;
   }
 
+  /** Extra time was already given once in this fight. */
+  continued = false;
+
+  /** Give extra time after the timer ran out (boss continue). */
+  extend(seconds: number): void {
+    this.timeLeft = seconds;
+    this.phase = 'tap';
+    this.continued = true;
+  }
+
   get hpFraction(): number {
     return this.hp / this.maxHp;
   }

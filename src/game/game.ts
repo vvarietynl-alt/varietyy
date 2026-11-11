@@ -1,4 +1,12 @@
 import {
+  AD_DAILY_LIMIT,
+  BOAT_SKINS,
+  type BoatSkinId,
+  DECOR,
+  type DecorId,
+  PERMANENTS,
+  type PermanentId,
+  TIME_WARPS,
   BOSS_FIGHT_SECONDS,
   CRIT_CHANCE,
   OFFLINE_CAP_HOURS,
@@ -37,6 +45,7 @@ import {
   zoneAverageGold,
   zoneUnlockPrice,
 } from './economy';
+import { dayKey } from './missions';
 import { type GameState, newGame } from './state';
 
 export type GameEvent =
@@ -107,7 +116,7 @@ export class Game {
 
   /** Gold multiplier for fish: Double Haul boost and the permanent pearl bonus. */
   get incomeMult(): number {
-    return (this.isBoostActive('doubleHaul') ? 2 : 1) * this.pearlBonus;
+    return (this.isBoostActive('doubleHaul') ? 2 : 1) * this.pearlBonus * (this.state.premium.goldenHull ? 2 : 1);
   }
 
   /** Permanent income multiplier from all pearls ever earned. */
@@ -116,7 +125,7 @@ export class Game {
   }
 
   get tapDamageMult(): number {
-    return (this.isBoostActive('strongArms') ? 2 : 1) * Math.pow(1.5, this.state.pearlUpgrades.masterAngler);
+    return (this.isBoostActive('strongArms') ? 2 : 1) * Math.pow(1.5, this.state.pearlUpgrades.masterAngler) * (this.state.premium.bigHooks ? 2 : 1);
   }
 
   get critChance(): number {
@@ -132,7 +141,95 @@ export class Game {
   }
 
   get offlineCapHours(): number {
-    return OFFLINE_CAP_HOURS + this.state.pearlUpgrades.deepPockets * 2;
+    return OFFLINE_CAP_HOURS + this.state.pearlUpgrades.deepPockets * 2 + (this.state.premium.nightShift ? 12 : 0);
+  }
+
+  // --- Rewarded ads (counting only; showing them is done by the Ads service) -------------
+
+  get adsLeftToday(): number {
+    const a = this.state.ads;
+    return a.day === dayKey(this.now()) ? Math.max(0, AD_DAILY_LIMIT - a.count) : AD_DAILY_LIMIT;
+  }
+
+  recordAdWatched(): void {
+    const today = dayKey(this.now());
+    const a = this.state.ads;
+    if (a.day !== today) {
+      a.day = today;
+      a.count = 0;
+    }
+    a.count++;
+  }
+
+  // --- Ruby shop ---------------------------------------------------------------------------
+
+  spendRubies(n: number): boolean {
+    if (this.state.rubies < n) return false;
+    this.state.rubies -= n;
+    return true;
+  }
+
+  buyPermanent(id: PermanentId): boolean {
+    if (this.state.premium[id] || !this.spendRubies(PERMANENTS[id].rubies)) return false;
+    this.state.premium[id] = true;
+    this.emit({ type: 'purchase' });
+    return true;
+  }
+
+  /** Gold for `hours` of income (at least the playing-income estimate). */
+  timeWarpGold(hours: number): number {
+    return Math.max(this.incomePerSecond, this.incomeEstimate) * hours * 3600;
+  }
+
+  timeWarp(index: number): number {
+    const w = TIME_WARPS[index];
+    if (!w || !this.spendRubies(w.rubies)) return 0;
+    const gold = this.timeWarpGold(w.hours);
+    this.addGold(gold);
+    this.emit({ type: 'purchase' });
+    return gold;
+  }
+
+  buySkin(id: BoatSkinId): boolean {
+    const c = this.state.cosmetics;
+    if (!c.skins.includes(id)) {
+      if (!this.spendRubies(BOAT_SKINS[id].rubies)) return false;
+      c.skins.push(id);
+    }
+    c.boatSkin = id;
+    this.emit({ type: 'purchase' });
+    return true;
+  }
+
+  buyDecor(id: DecorId): boolean {
+    const c = this.state.cosmetics;
+    if (c.decor.includes(id) || !this.spendRubies(DECOR[id].rubies)) return false;
+    c.decor.push(id);
+    this.emit({ type: 'purchase' });
+    return true;
+  }
+
+  /** Harbour Manager: hire the cheapest available fisherman when it costs ≤ 20% of your gold. */
+  managerStep(): boolean {
+    const s = this.state;
+    if (!s.premium.manager || !s.settings.autoHire) return false;
+    let best = -1;
+    let bestCost = Infinity;
+    for (let t = 0; t < s.fishermen.length; t++) {
+      if (!this.isFishermanUnlocked(t)) break;
+      const c = fishermanBulkCost(t, s.fishermen[t], 1);
+      if (c < bestCost) {
+        bestCost = c;
+        best = t;
+      }
+    }
+    // a new kind of fisherman is worth more: open the next tier when it costs ≤ 50% of your gold
+    const next = s.fishermen.findIndex((n) => n === 0);
+    if (next > 0 && this.isFishermanUnlocked(next) && fishermanBulkCost(next, 0, 1) <= s.gold * 0.5) {
+      return this.hireFisherman(next, 1);
+    }
+    if (best < 0 || bestCost > s.gold * 0.2) return false;
+    return this.hireFisherman(best, 1);
   }
 
   // --- New Voyage (prestige) ------------------------------------------------------------
@@ -198,7 +295,7 @@ export class Game {
   }
 
   get goldfishMult(): number {
-    return this.isBoostActive('goldenTide') ? 3 : 1;
+    return (this.isBoostActive('goldenTide') ? 3 : 1) * (this.state.premium.goldenRadar ? 2 : 1);
   }
 
   /**
@@ -419,12 +516,13 @@ export class Game {
     return { gold, seconds, countedSeconds };
   }
 
-  claimOffline(gold: number, triple: boolean): boolean {
-    if (triple) {
+  /** 'triple' costs rubies; 'double' is the reward of a watched ad. */
+  claimOffline(gold: number, mode: 'normal' | 'double' | 'triple' = 'normal'): boolean {
+    if (mode === 'triple') {
       if (this.state.rubies < OFFLINE_TRIPLE_RUBY_COST) return false;
       this.state.rubies -= OFFLINE_TRIPLE_RUBY_COST;
       gold *= 3;
-    }
+    } else if (mode === 'double') gold *= 2;
     this.addGold(gold);
     return true;
   }

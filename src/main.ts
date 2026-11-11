@@ -10,6 +10,8 @@ import { formatNumber } from './game/format';
 import { Game } from './game/game';
 import { loadState, newGame, SAVE_KEY, serializeState } from './game/state';
 import { WorldRenderer } from './render/worldRenderer';
+import { Ads } from './services/ads';
+import { TestAdProvider } from './ui/testAd';
 import { coin, h } from './ui/dom';
 import { Hud } from './ui/hud';
 import { Overlay } from './ui/overlay';
@@ -32,6 +34,7 @@ const world = new FishingWorld(game);
 const fleet = new Fleet(game, () => world.boat);
 const renderer = new WorldRenderer(canvas, world, game, fleet);
 const audio = new Audio();
+const ads = new Ads(game, new TestAdProvider(uiRoot));
 
 function save(): void {
   game.state.lastSeen = Date.now();
@@ -52,6 +55,7 @@ const panels = new PanelManager(uiRoot, {
   preview: (sp) => renderer.renderPreview(sp),
   sfx,
   reward: (text) => overlay.rewardPop(text),
+  ads,
   onClose: () => {},
   confirmVoyage: () => {
     const pearls = game.pearlsForVoyage;
@@ -88,6 +92,7 @@ const hud = new Hud(uiRoot, game, world, panels, {
   },
   isIslandMode: () => renderer.mode === 'island',
   sfx,
+  ads,
 });
 const overlay = new Overlay(overlayRoot, world, renderer);
 
@@ -154,8 +159,16 @@ world.on((e) => {
     case 'treasure-spawn':
       hud.toast([e.treasure.kind === 'chest' ? '🧰 A treasure chest is floating by — tap it!' : '🍾 A message in a bottle — tap it!'], true);
       break;
+    case 'boss-continue-offer':
+      sfx('error');
+      hud.showBossContinue(e.boss.species.name, e.fight.hpFraction, () => { world.acceptContinue(); sfx('boss'); }, () => world.declineContinue());
+      break;
     case 'treasure-opened': {
       const r = e.reward;
+      hud.offerDouble('Double this treasure!', 'double-treasure', () => {
+        game.grant(r);
+        overlay.rewardPop(r.kind === 'gold' ? `×2! +${formatNumber(r.amount)} gold` : r.kind === 'rubies' ? `×2! +${r.amount} rubies` : `×2! ${BOOSTS[r.boost].name} +${r.minutes} min`);
+      });
       sfx('goldfish');
       vibrate(40, game.state.settings.haptics);
       overlay.rewardPop(r.kind === 'gold' ? `🧰 +${formatNumber(r.amount)} gold` : r.kind === 'rubies' ? `🧰 +${r.amount} rubies!` : `🧰 ${BOOSTS[r.boost].name} ${r.minutes} min!`);
@@ -171,6 +184,10 @@ world.on((e) => {
       break;
     case 'goldfish-collected':
       overlay.floatGold(e.goldfish.x, e.goldfish.z, e.gold, true);
+      hud.offerDouble('Double the koi gold!', 'double-goldfish', () => {
+        game.addGold(e.gold);
+        overlay.rewardPop(`×2! +${formatNumber(e.gold)} gold`);
+      });
       break;
     case 'boss-start':
       sfx('boss');
@@ -223,7 +240,7 @@ canvas.addEventListener('pointerdown', (e) => {
   else world.tap();
 });
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') world.tap();
+  if (e.code === 'Space' && !(e.target instanceof HTMLInputElement)) world.tap();
 });
 window.addEventListener('resize', () => renderer.resize());
 document.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -242,6 +259,10 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', save);
 setInterval(save, 5000);
+// Harbour Manager (ruby purchase) hires fishermen automatically
+setInterval(() => {
+  for (let i = 0; i < 5 && game.managerStep(); i++);
+}, 1000);
 ensureMissions(game);
 checkOffline();
 

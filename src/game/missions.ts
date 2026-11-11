@@ -1,4 +1,4 @@
-import { DAILY_REWARDS, type DailyReward, MISSION_GROWTH, MISSION_SLOTS, ZONES_PER_LEVEL } from '../data/balance';
+import { CAPTAINS_PASS_DAILY_RUBIES, DAILY_REWARDS, type DailyReward, MISSION_GROWTH, MISSION_SLOTS, ZONES_PER_LEVEL } from '../data/balance';
 import { formatNumber } from './format';
 import type { Game } from './game';
 import type { Mission, StatKey } from './state';
@@ -138,5 +138,6 @@ export function claimDaily(g: Game): DailyReward | null {
   if (reward.kind === 'gold') g.addGold(g.rewardGold(reward.minutes));
   else if (reward.kind === 'rubies') g.state.rubies += reward.amount;
   else g.activateBoost(reward.boost, reward.minutes);
+  if (g.state.premium.captainsPass) g.state.rubies += CAPTAINS_PASS_DAILY_RUBIES;
   return reward;
 }

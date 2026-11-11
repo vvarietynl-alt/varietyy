@@ -80,6 +80,17 @@ Resultaat van de simulatie (constant actief spelen, slimme aankopen): level 1 �
 - Simulatie: `npm run sim -- --voyages 14` — elke reis komt ±10 levels verder dan de vorige, reizen duren geleidelijk langer
   (3 → 20 uur actief). De getallen blijven tot ongeveer level 200 binnen wat JavaScript aankan; daarboven stopt de game veilig.
 
+## Rubies en beloonde reclame
+
+- **Reclame alleen vrijwillig, op momenten dat het iets oplevert** (max. 12 per dag):
+  offline goud ×2, +15 s bij een boss die bijna verslagen is, schatkist of goudvis verdubbelen, missiebeloning ×2,
+  2× goud voor 15 minuten (knop rechtsonder), gratis rubies. Nooit gedwongen reclame.
+- **Rubywinkel** (3 tabs): rubies / Captain's Pass, permanente bonussen (Golden Hull, Big Hooks, Golden Radar, Night Shift,
+  Harbour Manager — blijven ook na een Nieuwe Reis), tijd overslaan (1 / 4 / 24 uur goud), bootskins en eilandversiering.
+- **Captain's Pass**: alle reclamebeloningen zonder reclame + dagelijks extra rubies.
+- Reclame loopt via `src/services/ads.ts`. Nu toont een testprovider een nepfilmpje van 3 s; in de Android-app komt daar
+  AdMob voor in de plaats (bijv. `@capacitor-community/admob`). Aankopen komen via Google Play Billing.
+
 ## Projectstructuur
 
 ```
