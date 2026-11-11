@@ -85,6 +85,7 @@ Resultaat van de simulatie (constant actief spelen, slimme aankopen): level 1 �
 - **Zee-evenementen** elke 4–7 min: Fish Frenzy (grote school, ×2 goud, 30 s) of Golden Hour (regen van goudvissen, 20 s)
 - **Onthullingskaart** bij elke nieuwe zeldzame vis en bij een verslagen boss; **confetti** bij grote momenten
 - **Atlas-sets**: een volledige groep vissen per zee geeft rubies + permanent +2% goud
+- **Engine-upgrade** (Boat Workshop): tot 3× sneller varen; de boot krijgt een buitenboordmotor (Lv 1), twee motoren (Lv 10) en een turbo (Lv 25)
 - **Snellere start**: prijscurve binnen elk level (eerste zones goedkoper), zone 2 opent na ±1 minuut
 - **Geheugenlek opgelost**: gedeelde geometrie, het aantal GPU-objecten blijft stabiel (was: groeide onbeperkt)
 

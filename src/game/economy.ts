@@ -25,6 +25,8 @@ import {
   OFFLINE_CAP_HOURS,
   OFFLINE_EFFICIENCY,
   RADAR_PER_LEVEL,
+  ENGINE_SPEED_PER_LEVEL,
+  ENGINE_VISUAL_TIERS,
   RARITY_GOLD_MULT,
   RARITY_HP_MULT,
   SKILL_GROWTH,
@@ -92,6 +94,16 @@ export function tapDamage(u: UpgradeLevels): number {
 export function autoDps(u: UpgradeLevels): number {
   if (u.autoGear <= 0) return 0;
   return AUTO_GEAR_BASE_DPS * Math.pow(AUTO_GEAR_GROWTH, u.autoGear - 1);
+}
+
+/** Boat speed multiplier from the Engine upgrade. */
+export function boatSpeedMult(engineLevel: number): number {
+  return 1 + engineLevel * ENGINE_SPEED_PER_LEVEL;
+}
+
+/** 0 = no motor, 1 = outboard motor, 2 = twin motors, 3 = turbo. */
+export function engineVisualTier(engineLevel: number): number {
+  return ENGINE_VISUAL_TIERS.filter((t) => engineLevel >= t).length;
 }
 
 export function radarMultiplier(radarLevel: number): number {

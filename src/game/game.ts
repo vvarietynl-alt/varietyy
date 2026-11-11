@@ -314,7 +314,7 @@ export class Game {
     s.activeZone = 1;
     s.zoneCatches = {};
     s.bossesDefeated = [false, false];
-    s.upgrades = { skill: 0, speed: 0, autoGear: 0, radar: 0 };
+    s.upgrades = { skill: 0, speed: 0, autoGear: 0, radar: 0, engine: 0 };
     s.fishermen = s.fishermen.map(() => 0);
     s.gold = this.headStartGold;
     s.runGold = 0;

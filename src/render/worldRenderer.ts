@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { CatchableRarity } from '../data/balance';
 import { themeFor, type FishSpecies } from '../data/fish';
+import { boatSpeedMult, engineVisualTier } from '../game/economy';
 import { type FishEntity, type FishingWorld, ISLAND_RADIUS, ZONE_WIDTH, zoneBand } from '../game/fishing';
 import type { Game } from '../game/game';
 import type { Fleet } from '../game/fleet';
@@ -265,10 +266,14 @@ export class WorldRenderer {
   /** Rebuild the player boat when the skin changes, and place bought decorations. */
   private syncCosmetics(): void {
     const c = this.game.state.cosmetics;
-    if (c.boatSkin !== this.boatSkin) {
-      this.boatSkin = c.boatSkin;
+    const tier = engineVisualTier(this.game.state.upgrades.engine);
+    const boatKey = `${c.boatSkin}-${tier}`;
+    if (boatKey !== this.boatSkin) {
+      const upgraded = this.boatSkin !== '' && this.boatSkin.endsWith(`-${tier - 1}`);
+      this.boatSkin = boatKey;
       this.scene.remove(this.boat.group);
-      this.boat = createBoat(BOAT_SKINS[c.boatSkin] ?? BOAT_SKINS.classic);
+      this.boat = createBoat(BOAT_SKINS[c.boatSkin] ?? BOAT_SKINS.classic, tier);
+      if (upgraded) this.splash(this.world.boat.x, this.world.boat.z, 24, 0xffd23f);
       this.scene.add(this.boat.group);
     }
     const key = c.decor.join();
@@ -310,9 +315,15 @@ export class WorldRenderer {
     g.rotation.z = Math.sin(this.time * 1.7) * 0.05;
     g.rotation.x = Math.sin(this.time * 1.3) * 0.04 + (b.moving ? -0.05 : 0);
     this.boat.radar.rotation.y += dt * (1 + this.game.state.upgrades.radar * 0.4);
-    if (b.moving && Math.random() < dt * 25) {
-      const back = new THREE.Vector3(-Math.sin(b.heading) * 1.6, 0, -Math.cos(b.heading) * 1.6);
-      this.splash(b.x + back.x, b.z + back.z, 1, 0xffffff, 0.6);
+    const speed = boatSpeedMult(this.game.state.upgrades.engine);
+    g.traverse((o) => {
+      if (o.userData.prop) o.rotation.z += dt * (b.moving ? 40 : 6);
+      if (o.userData.flame) o.scale.setScalar(b.moving ? 0.8 + Math.random() * 0.6 : 0.3);
+    });
+    // a bigger wake the faster the boat goes
+    if (b.moving && Math.random() < dt * 25 * speed) {
+      const back = new THREE.Vector3(-Math.sin(b.heading) * 1.9, 0, -Math.cos(b.heading) * 1.9);
+      this.splash(b.x + back.x + (Math.random() - 0.5) * 0.6, b.z + back.z + (Math.random() - 0.5) * 0.6, 1, 0xffffff, 0.5 + speed * 0.2);
     }
   }
 

@@ -233,7 +233,7 @@ describe('save games', () => {
     expect(back.fishermen[2]).toBe(5);
     expect(loadState('not json').gold).toBe(0);
     const partial = loadState(JSON.stringify({ gold: 5, upgrades: { skill: 3 } }));
-    expect(partial.upgrades).toEqual({ skill: 3, speed: 0, autoGear: 0, radar: 0 });
+    expect(partial.upgrades).toEqual({ skill: 3, speed: 0, autoGear: 0, radar: 0, engine: 0 });
     expect(partial.fishermen).toHaveLength(25);
   });
 });

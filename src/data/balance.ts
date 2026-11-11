@@ -143,7 +143,7 @@ export interface UpgradeDef {
   baseCost: number;
   costGrowth: number;
 }
-export type UpgradeId = 'skill' | 'speed' | 'autoGear' | 'radar';
+export type UpgradeId = 'skill' | 'speed' | 'autoGear' | 'radar' | 'engine';
 
 export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
   skill: {
@@ -177,6 +177,15 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
     // by level 4 of 10. Now grows with the rest of the economy.
     costGrowth: 1.48,
   },
+  engine: {
+    id: 'engine',
+    name: 'Engine',
+    building: 'boatWorkshop',
+    description: 'Your boat sails 8% faster',
+    maxLevel: 25,
+    baseCost: 300,
+    costGrowth: 1.6,
+  },
   radar: {
     id: 'radar',
     name: 'Radar',
@@ -193,6 +202,9 @@ export const SPEED_PER_LEVEL = 0.5;
 export const AUTO_GEAR_BASE_DPS = 1.2;
 export const AUTO_GEAR_GROWTH = 1.215;
 export const RADAR_PER_LEVEL = 0.15;
+export const ENGINE_SPEED_PER_LEVEL = 0.08;
+/** Engine level at which the boat model gets an outboard motor, twin motors and a turbo. */
+export const ENGINE_VISUAL_TIERS = [1, 10, 25];
 
 // ---------------------------------------------------------------------------
 // Fishermen (Fishermen's School). Names from the GDD (25).

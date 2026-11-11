@@ -19,11 +19,13 @@ import {
   DECOR,
   PERMANENTS,
   TIME_WARPS,
+  ENGINE_VISUAL_TIERS,
 } from '../data/balance';
 import type { Ads } from '../services/ads';
 import { ALL_SPECIES, bossSpecies, themeFor, type FishSpecies } from '../data/fish';
 import {
   autoDps,
+  boatSpeedMult,
   bestFishingZone,
   fishermanBulkCost,
   fishermanMaxAffordable,
@@ -258,10 +260,20 @@ export class PanelManager {
         subtitle: () => 'Upgrade your ship',
         build: (body) => {
           const auto = h('b');
+          const speed = h('b');
+          const nextLook = h('small', { class: 'note', style: 'margin:0' });
+          const [r0, u0] = upgradeRow('engine', '🚤', (l) => `${Math.round(boatSpeedMult(l) * 100)}% speed`);
           const [r1, u1] = upgradeRow('autoGear', '⚙️', (l) => (l === 0 ? 'off' : `${formatNumber(autoDps({ ...s().upgrades, autoGear: l }))}/s`));
           const [r2, u2] = upgradeRow('radar', '📡', (l) => `goldfish ×${radarMultiplier(l).toFixed(2)}`);
-          body.append(h('div', { class: 'summary' }, h('span', null, 'Auto reel ', auto)), r1, r2);
-          return [() => setText(auto, `${formatNumber(autoDps(s().upgrades))} dmg/s`), u1, u2];
+          body.append(h('div', { class: 'summary' }, h('span', null, 'Speed ', speed), h('span', null, 'Auto reel ', auto), nextLook), r0, r1, r2);
+          const looks = ['an outboard motor', 'twin motors', 'a turbo'];
+          return [() => {
+            const e = s().upgrades.engine;
+            setText(speed, `×${boatSpeedMult(e).toFixed(2)}`);
+            setText(auto, `${formatNumber(autoDps(s().upgrades))} dmg/s`);
+            const next = ENGINE_VISUAL_TIERS.findIndex((t) => e < t);
+            setText(nextLook, next >= 0 ? `🔧 Engine Lv ${ENGINE_VISUAL_TIERS[next]}: your boat gets ${looks[next]}` : '🔥 Fully tuned turbo boat!');
+          }, u0, u1, u2];
         },
       },
 

@@ -272,7 +272,7 @@ export interface BoatModel {
   radar: THREE.Object3D;
 }
 
-export function createBoat(skin: { hull: number; trim: number; roof: number; glow?: number } = { hull: 0xd8392f, trim: 0xfaf6ee, roof: 0xd8392f }): BoatModel {
+export function createBoat(skin: { hull: number; trim: number; roof: number; glow?: number } = { hull: 0xd8392f, trim: 0xfaf6ee, roof: 0xd8392f }, engineTier = 0): BoatModel {
   const group = new THREE.Group();
   const glow = skin.glow ? { emissive: skin.glow } : undefined;
   const hullShape = new THREE.Shape();
@@ -340,6 +340,39 @@ export function createBoat(skin: { hull: number; trim: number; roof: number; glo
   harpoon.position.set(0, 0.8, 1.2);
   harpoon.rotation.x = Math.PI / 2.4;
   group.add(harpoon);
+
+  // engine upgrades: outboard motor → twin motors → turbo
+  const motorXs = engineTier >= 2 ? [-0.42, 0.42] : engineTier >= 1 ? [0] : [];
+  for (const x of motorXs) {
+    const motor = new THREE.Group();
+    const head = mesh(new THREE.BoxGeometry(0.42, 0.5, 0.45), engineTier >= 3 ? 0x2b2b33 : 0x3a3f4a);
+    head.position.y = 0.75;
+    motor.add(head);
+    const cap = mesh(new THREE.BoxGeometry(0.44, 0.12, 0.47), skin.roof);
+    cap.position.y = 1.05;
+    motor.add(cap);
+    const shaft = mesh(new THREE.BoxGeometry(0.12, 0.6, 0.12), 0x555b66);
+    shaft.position.y = 0.3;
+    motor.add(shaft);
+    const prop = mesh(new THREE.BoxGeometry(0.5, 0.08, 0.06), 0xc0c4cc);
+    prop.position.set(0, 0.05, -0.08);
+    prop.userData.prop = true;
+    motor.add(prop);
+    if (engineTier >= 3) {
+      const flame = mesh(new THREE.ConeGeometry(0.13, 0.5, 6), 0xff9a1a, { emissive: 0xff6a00 });
+      flame.rotation.x = -Math.PI / 2;
+      flame.position.set(0, 0.85, -0.45);
+      flame.userData.flame = true;
+      motor.add(flame);
+    }
+    motor.position.set(x, 0.1, -1.68);
+    group.add(motor);
+  }
+  if (engineTier >= 3) {
+    const spoiler = mesh(new THREE.BoxGeometry(1.5, 0.06, 0.35), skin.roof, glow);
+    spoiler.position.set(0, 1.72, -1.05);
+    group.add(spoiler);
+  }
 
   return { group, rodTip, radar };
 }

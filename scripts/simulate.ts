@@ -21,6 +21,7 @@ import {
 } from '../src/data/balance';
 import {
   autoDps,
+  boatSpeedMult,
   bestFishingZone,
   bossHp,
   fishermanCost,
@@ -36,7 +37,7 @@ import { formatDuration, formatNumber } from '../src/game/format';
 import { Game } from '../src/game/game';
 
 const printZones = process.argv.includes('--zones');
-const TRAVEL_SECONDS = 2.5; // boat sailing to the next fish
+const TRAVEL_SECONDS = 2.5; // boat sailing to the next fish (divided by the engine speed)
 const MINIGAME_HITS = 6; // green hits per mini-game for an average player
 
 const game = new Game(undefined, () => 0.5);
@@ -55,7 +56,7 @@ function averageHp(level: number, zone: number): number {
 function activeIncome(): number {
   const zone = bestFishingZone(s.unlockedZone);
   const dps = playerDps();
-  const secondsPerFish = TRAVEL_SECONDS + averageHp(s.level, zone) / dps;
+  const secondsPerFish = TRAVEL_SECONDS / boatSpeedMult(s.upgrades.engine) + averageHp(s.level, zone) / dps;
   const fishIncome = (zoneAverageGold(s.level, zone) * game.incomeMult) / secondsPerFish;
   const goldfish = (goldfishPerMinute(zone, s.upgrades.radar) / 60) * 0.7 * goldfishGold(s.level, zone, game.incomePerSecond);
   return fishIncome + goldfish;
@@ -153,7 +154,7 @@ function playVoyage(endless: boolean): void {
     if (st.kind === 'need-catches') {
       const missing = st.need - st.have;
       const zone = s.unlockedZone;
-      const secs = missing * (TRAVEL_SECONDS + averageHp(s.level, zone) / playerDps());
+      const secs = missing * (TRAVEL_SECONDS / boatSpeedMult(s.upgrades.engine) + averageHp(s.level, zone) / playerDps());
       const a = activeIncome() * secs;
       const f = game.incomePerSecond * secs;
       game.addGold(a + f);

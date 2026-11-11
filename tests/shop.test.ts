@@ -119,3 +119,30 @@ describe('boss continue', () => {
     expect(w.fight?.phase).toBe('tap');
   });
 });
+
+describe('engine upgrade', () => {
+  it('makes the boat faster and changes its look at milestones', async () => {
+    const { boatSpeedMult, engineVisualTier } = await import('../src/game/economy');
+    expect(boatSpeedMult(0)).toBe(1);
+    expect(boatSpeedMult(25)).toBeCloseTo(3, 6);
+    expect([0, 1, 9, 10, 24, 25].map(engineVisualTier)).toEqual([0, 1, 1, 2, 2, 3]);
+    const g = new Game(newGame());
+    g.addGold(1e6);
+    expect(g.buyUpgrade('engine')).toBe(true);
+    expect(g.state.upgrades.engine).toBe(1);
+    // the boat covers more distance per second
+    const w1 = new FishingWorld(new Game(newGame(), () => 0.5), () => 0.5);
+    const fast = new Game(newGame(), () => 0.5);
+    fast.state.upgrades.engine = 25;
+    const w2 = new FishingWorld(fast, () => 0.5);
+    // start both boats away from the fish so they have to sail
+    for (const w of [w1, w2]) { w.boat.x = 0; w.boat.z = 45; }
+    const start1 = { ...w1.boat };
+    const start2 = { ...w2.boat };
+    w1.update(0.5);
+    w2.update(0.5);
+    const d1 = Math.hypot(w1.boat.x - start1.x, w1.boat.z - start1.z);
+    const d2 = Math.hypot(w2.boat.x - start2.x, w2.boat.z - start2.z);
+    expect(d2).toBeGreaterThan(d1 * 1.5);
+  });
+});

@@ -22,7 +22,7 @@ import {
 } from '../data/balance';
 import { bossSpecies, type FishSpecies } from '../data/fish';
 import { BossFight } from './bossFight';
-import { autoDps, bossHp, fishHp, goldfishPerMinute, rollRarity, tapDamage } from './economy';
+import { autoDps, boatSpeedMult, bossHp, fishHp, goldfishPerMinute, rollRarity, tapDamage } from './economy';
 import type { ChestReward, Game } from './game';
 
 /**
@@ -595,7 +595,7 @@ export class FishingWorld {
     this.boat.heading = turnTowards(this.boat.heading, desired, dt * 3.5);
     // slow down while turning hard
     const align = Math.max(0.25, Math.cos(angleDiff(this.boat.heading, desired)));
-    const step = Math.min(d - stopAt, BOAT_SPEED * align * dt);
+    const step = Math.min(d - stopAt, BOAT_SPEED * boatSpeedMult(this.game.state.upgrades.engine) * align * dt);
     this.boat.x += Math.sin(this.boat.heading) * step;
     this.boat.z += Math.cos(this.boat.heading) * step;
     // never sail onto the island

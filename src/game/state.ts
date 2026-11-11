@@ -90,7 +90,7 @@ export function newGame(now = Date.now()): GameState {
     activeZone: 1,
     zoneCatches: {},
     bossesDefeated: [false, false],
-    upgrades: { skill: 0, speed: 0, autoGear: 0, radar: 0 },
+    upgrades: { skill: 0, speed: 0, autoGear: 0, radar: 0, engine: 0 },
     fishermen: new Array(FISHERMAN_COUNT).fill(0),
     atlas: {},
     stats: {
