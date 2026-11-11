@@ -8,7 +8,12 @@ import {
   FISHERMAN_BASE_COST,
   FISHERMAN_BASE_PROD,
   FISHERMAN_HIRE_COST_GROWTH,
+  FISHERMAN_MILESTONE_STEP,
   FISHERMAN_MILESTONES,
+  levelBaseGold,
+  levelBaseHp,
+  levelPriceMult,
+  zoneBasePrice,
   FISHERMAN_NAMES,
   FISHERMAN_TIER_COST_GROWTH,
   FISHERMAN_TIER_PROD_GROWTH,
@@ -17,9 +22,6 @@ import {
   GOLDFISH_FLEET_SECONDS,
   GOLDFISH_PER_MINUTE,
   isBossZone,
-  LEVEL_BASE_GOLD,
-  LEVEL_BASE_HP,
-  LEVEL_COUNT,
   OFFLINE_CAP_HOURS,
   OFFLINE_EFFICIENCY,
   RADAR_PER_LEVEL,
@@ -32,20 +34,18 @@ import {
   type UpgradeId,
   ZONE_GOLD_GROWTH,
   ZONE_HP_MULT,
-  LEVEL_PRICE_MULT,
-  ZONE_PRICES,
 } from '../data/balance';
 
 // --- Fish -------------------------------------------------------------------
 
 export function fishGold(level: number, zone: number, rarity: CatchableRarity): number {
   const ord = fishingZoneOrdinal(zone);
-  return LEVEL_BASE_GOLD[level - 1] * Math.pow(ZONE_GOLD_GROWTH, ord) * RARITY_GOLD_MULT[rarity];
+  return levelBaseGold(level) * Math.pow(ZONE_GOLD_GROWTH, ord) * RARITY_GOLD_MULT[rarity];
 }
 
 export function fishHp(level: number, zone: number, rarity: CatchableRarity): number {
   const ord = fishingZoneOrdinal(zone);
-  return LEVEL_BASE_HP[level - 1] * ZONE_HP_MULT[ord] * RARITY_HP_MULT[rarity];
+  return levelBaseHp(level) * ZONE_HP_MULT[ord] * RARITY_HP_MULT[rarity];
 }
 
 /** Expected gold of one random fish in a zone (spawn-weighted). */
@@ -126,14 +126,21 @@ export function fishermanMaxAffordable(tier: number, owned: number, gold: number
   return Math.max(0, Math.min(max, n));
 }
 
-export function fishermanMilestoneMult(owned: number): number {
-  let mult = 1;
-  for (const m of FISHERMAN_MILESTONES) if (owned >= m) mult *= 2;
-  return mult;
+function milestonesReached(owned: number): number {
+  const last = FISHERMAN_MILESTONES[FISHERMAN_MILESTONES.length - 1];
+  const fixed = FISHERMAN_MILESTONES.filter((m) => owned >= m).length;
+  return fixed + (owned >= last ? Math.floor((owned - last) / FISHERMAN_MILESTONE_STEP) : 0);
 }
 
-export function nextFishermanMilestone(owned: number): number | undefined {
-  return FISHERMAN_MILESTONES.find((m) => m > owned);
+export function fishermanMilestoneMult(owned: number): number {
+  return Math.pow(2, milestonesReached(owned));
+}
+
+export function nextFishermanMilestone(owned: number): number {
+  const next = FISHERMAN_MILESTONES.find((m) => m > owned);
+  if (next !== undefined) return next;
+  const last = FISHERMAN_MILESTONES[FISHERMAN_MILESTONES.length - 1];
+  return last + (Math.floor((owned - last) / FISHERMAN_MILESTONE_STEP) + 1) * FISHERMAN_MILESTONE_STEP;
 }
 
 /** Fish per second produced by all fishermen of one tier. */
@@ -161,23 +168,22 @@ export function fleetIncomePerSecond(level: number, unlockedZone: number, fisher
 
 export function zoneUnlockPrice(level: number, zone: number): number {
   if (isBossZone(zone)) return 0;
-  return ZONE_PRICES[level - 1][fishingZoneOrdinal(zone)] * LEVEL_PRICE_MULT[level - 1];
+  return zoneBasePrice(level, fishingZoneOrdinal(zone)) * levelPriceMult(level);
 }
 
 export function nextLevelPrice(level: number): number {
-  if (level >= LEVEL_COUNT) return Infinity;
-  return ZONE_PRICES[level][0] * LEVEL_PRICE_MULT[level];
+  return zoneBasePrice(level + 1, 0) * levelPriceMult(level + 1);
 }
 
 // --- Bosses -----------------------------------------------------------------
 
 export function bossHp(level: number, bossIndex: number): number {
   const zoneInFront = bossIndex === 0 ? 4 : 9;
-  return LEVEL_BASE_HP[level - 1] * ZONE_HP_MULT[fishingZoneOrdinal(zoneInFront)] * BOSS_HP_MULT[bossIndex];
+  return levelBaseHp(level) * ZONE_HP_MULT[fishingZoneOrdinal(zoneInFront)] * BOSS_HP_MULT[bossIndex];
 }
 
 export function bossGold(level: number, bossIndex: number): number {
-  return LEVEL_BASE_GOLD[level - 1] * BOSS_GOLD_MULT[bossIndex];
+  return levelBaseGold(level) * BOSS_GOLD_MULT[bossIndex];
 }
 
 // --- Goldfish ---------------------------------------------------------------

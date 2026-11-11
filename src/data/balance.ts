@@ -13,6 +13,7 @@
  *     goldfish and rare catches for the Marine Atlas.
  */
 
+/** Hand-made seas. After these the game continues endlessly with tougher versions (see levelBaseGold etc.). */
 export const LEVEL_COUNT = 10;
 export const ZONES_PER_LEVEL = 10;
 /** Zones (1-based) that contain a boss instead of a fish school. */
@@ -141,7 +142,7 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
     name: "Angler's Skill",
     building: 'fishingWorkshop',
     description: 'Damage of every tap ×1.2',
-    maxLevel: 100,
+    maxLevel: 1000,
     baseCost: 100, // sheet: 100 ×1.5
     costGrowth: 1.5,
   },
@@ -161,7 +162,7 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
     name: 'Automatic Gear',
     building: 'boatWorkshop',
     description: 'Boat reels in fish by itself',
-    maxLevel: 100,
+    maxLevel: 1000,
     baseCost: 150,
     // FIX: sheet grew price ×1.2 per level, so level 100 cost 6.9e9 — maxed out
     // by level 4 of 10. Now grows with the rest of the economy.
@@ -229,6 +230,8 @@ export const FISHERMAN_TIER_PROD_GROWTH = 2.4;
 export const FISHERMAN_HIRE_COST_GROWTH = 1.12;
 /** Production doubles when you own this many of one fisherman. */
 export const FISHERMAN_MILESTONES = [25, 50, 100, 200];
+/** After the last milestone, production keeps doubling every this many hires (endless play). */
+export const FISHERMAN_MILESTONE_STEP = 100;
 
 // ---------------------------------------------------------------------------
 // Bosses (mythical fish). GDD: 60 s fight, mini-game at 80% and 40%,
@@ -337,3 +340,79 @@ export const DAILY_REWARDS: DailyReward[] = [
   { kind: 'boost', boost: 'goldenTide', minutes: 30 },
   { kind: 'rubies', amount: 25 },
 ];
+
+// ---------------------------------------------------------------------------
+// Endless play
+// ---------------------------------------------------------------------------
+// After level 10 the seas repeat as tougher versions ("Sunny Shallows II" …).
+// Per extra level: fish worth ×4, fish HP ×1.75, zone prices ×16 and a price
+// factor ×1.25 (so a level needs ~5× more income than the one before) —
+// sooner or later a New Voyage with pearls is the way forward.
+// Growth is kept modest so numbers stay below the JavaScript limit (1e308)
+// until about level 200. Simulated: each voyage reaches ~10 levels further
+// than the last, voyages slowly get longer (3 h → 20 h); see
+// `npm run sim -- --voyages 14`.
+export const ENDLESS_GOLD_GROWTH = 4;
+export const ENDLESS_HP_GROWTH = 1.75;
+export const ENDLESS_PRICE_GROWTH = 16;
+export const ENDLESS_PRICE_MULT_GROWTH = 1.25;
+
+export function levelBaseGold(level: number): number {
+  if (level <= LEVEL_COUNT) return LEVEL_BASE_GOLD[level - 1];
+  return LEVEL_BASE_GOLD[LEVEL_COUNT - 1] * Math.pow(ENDLESS_GOLD_GROWTH, level - LEVEL_COUNT);
+}
+
+export function levelBaseHp(level: number): number {
+  if (level <= LEVEL_COUNT) return LEVEL_BASE_HP[level - 1];
+  return LEVEL_BASE_HP[LEVEL_COUNT - 1] * Math.pow(ENDLESS_HP_GROWTH, level - LEVEL_COUNT);
+}
+
+/** Sheet zone price for a level and fishing-zone ordinal, extrapolated after level 10. */
+export function zoneBasePrice(level: number, ordinal: number): number {
+  if (level <= LEVEL_COUNT) return ZONE_PRICES[level - 1][ordinal];
+  return ZONE_PRICES[LEVEL_COUNT - 1][ordinal] * Math.pow(ENDLESS_PRICE_GROWTH, level - LEVEL_COUNT);
+}
+
+/** Safety limit: beyond this the numbers would overflow. */
+export const MAX_PRICE = 1e290;
+
+export function levelPriceMult(level: number): number {
+  if (level <= LEVEL_COUNT) return LEVEL_PRICE_MULT[level - 1];
+  return LEVEL_PRICE_MULT[LEVEL_COUNT - 1] * Math.pow(ENDLESS_PRICE_MULT_GROWTH, level - LEVEL_COUNT);
+}
+
+// ---------------------------------------------------------------------------
+// New Voyage (prestige) and pearls
+// ---------------------------------------------------------------------------
+/** Level you must have reached before starting a new voyage. */
+export const PRESTIGE_MIN_LEVEL = 3;
+/**
+ * Pearls for a voyage depend on how far you sailed (level + zone/10):
+ * PEARL_SCALE × PEARL_LEVEL_GROWTH ^ (progress − PRESTIGE_MIN_LEVEL).
+ * The growth per level must beat how much harder each level gets, otherwise
+ * voyages stop getting further (checked with `npm run sim -- --voyages 12`).
+ */
+export const PEARL_SCALE = 10;
+export const PEARL_LEVEL_GROWTH = 3;
+/** Every pearl ever earned: +2% gold from all fish, permanently. */
+export const PEARL_INCOME_BONUS = 0.02;
+
+export type PearlUpgradeId = 'masterAngler' | 'biggerNets' | 'headStart' | 'longBreath' | 'luckyCharm' | 'deepPockets' | 'pearlDiver';
+export interface PearlUpgradeDef {
+  id: PearlUpgradeId;
+  name: string;
+  description: string;
+  icon: string;
+  maxLevel: number;
+  baseCost: number;
+  costGrowth: number;
+}
+export const PEARL_UPGRADES: Record<PearlUpgradeId, PearlUpgradeDef> = {
+  masterAngler: { id: 'masterAngler', name: 'Master Angler', description: 'Tap damage ×1.5', icon: '🎣', maxLevel: 500, baseCost: 5, costGrowth: 2.2 },
+  biggerNets: { id: 'biggerNets', name: 'Bigger Nets', description: 'Fleet catches ×1.25', icon: '🕸️', maxLevel: 500, baseCost: 5, costGrowth: 2.2 },
+  headStart: { id: 'headStart', name: 'Head Start', description: 'Start every voyage with more gold', icon: '💼', maxLevel: 10, baseCost: 10, costGrowth: 2.5 },
+  longBreath: { id: 'longBreath', name: 'Long Breath', description: '+5 s for boss fights', icon: '⏱️', maxLevel: 6, baseCost: 15, costGrowth: 2.2 },
+  luckyCharm: { id: 'luckyCharm', name: 'Lucky Charm', description: '+1% lucky catch and critical hit chance', icon: '🍀', maxLevel: 10, baseCost: 10, costGrowth: 1.8 },
+  deepPockets: { id: 'deepPockets', name: 'Deep Pockets', description: '+2 h offline earnings', icon: '🌙', maxLevel: 12, baseCost: 8, costGrowth: 1.7 },
+  pearlDiver: { id: 'pearlDiver', name: 'Pearl Diver', description: '+10% pearls from every voyage', icon: '🐚', maxLevel: 25, baseCost: 20, costGrowth: 1.9 },
+};

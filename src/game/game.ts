@@ -1,4 +1,14 @@
 import {
+  BOSS_FIGHT_SECONDS,
+  CRIT_CHANCE,
+  OFFLINE_CAP_HOURS,
+  MAX_PRICE,
+  PEARL_LEVEL_GROWTH,
+  PEARL_INCOME_BONUS,
+  PEARL_SCALE,
+  PEARL_UPGRADES,
+  type PearlUpgradeId,
+  PRESTIGE_MIN_LEVEL,
   BOOST_MAX_HOURS,
   BOOSTS,
   type BoostId,
@@ -7,7 +17,6 @@ import {
   catchesToUnlockNext,
   type CatchableRarity,
   isBossZone,
-  LEVEL_COUNT,
   OFFLINE_MIN_SECONDS,
   OFFLINE_TRIPLE_RUBY_COST,
   UPGRADES,
@@ -34,6 +43,7 @@ export type GameEvent =
   | { type: 'catch'; species: FishSpecies; gold: number; firstTime: boolean; trophy: boolean; lucky: boolean }
   | { type: 'chest'; reward: ChestReward }
   | { type: 'boost'; boost: BoostId; minutes: number }
+  | { type: 'voyage'; pearls: number }
   | { type: 'goldfish'; species: FishSpecies; gold: number }
   | { type: 'boss-defeated'; species: FishSpecies; gold: number; levelComplete: boolean }
   | { type: 'zone-unlocked'; zone: number }
@@ -95,13 +105,96 @@ export class Game {
     return true;
   }
 
-  /** Gold multiplier for fish (Double Haul). */
+  /** Gold multiplier for fish: Double Haul boost and the permanent pearl bonus. */
   get incomeMult(): number {
-    return this.isBoostActive('doubleHaul') ? 2 : 1;
+    return (this.isBoostActive('doubleHaul') ? 2 : 1) * this.pearlBonus;
+  }
+
+  /** Permanent income multiplier from all pearls ever earned. */
+  get pearlBonus(): number {
+    return 1 + this.state.pearlsEarned * PEARL_INCOME_BONUS;
   }
 
   get tapDamageMult(): number {
-    return this.isBoostActive('strongArms') ? 2 : 1;
+    return (this.isBoostActive('strongArms') ? 2 : 1) * Math.pow(1.5, this.state.pearlUpgrades.masterAngler);
+  }
+
+  get critChance(): number {
+    return CRIT_CHANCE + this.state.pearlUpgrades.luckyCharm * 0.01;
+  }
+
+  get luckyChance(): number {
+    return LUCKY_CATCH_CHANCE + this.state.pearlUpgrades.luckyCharm * 0.01;
+  }
+
+  get bossSeconds(): number {
+    return BOSS_FIGHT_SECONDS + this.state.pearlUpgrades.longBreath * 5;
+  }
+
+  get offlineCapHours(): number {
+    return OFFLINE_CAP_HOURS + this.state.pearlUpgrades.deepPockets * 2;
+  }
+
+  // --- New Voyage (prestige) ------------------------------------------------------------
+
+  /** Pearls a new voyage would give right now. */
+  get pearlsForVoyage(): number {
+    const s = this.state;
+    if (s.level < PRESTIGE_MIN_LEVEL) return 0;
+    const progress = s.level + (s.unlockedZone - 1) / 10;
+    const raw = PEARL_SCALE * Math.pow(PEARL_LEVEL_GROWTH, progress - PRESTIGE_MIN_LEVEL) * (1 + s.pearlUpgrades.pearlDiver * 0.1);
+    return Math.max(0, Math.floor(raw));
+  }
+
+  canStartVoyage(): boolean {
+    return this.state.level >= PRESTIGE_MIN_LEVEL && this.pearlsForVoyage >= 1;
+  }
+
+  /** Gold every voyage starts with (Head Start). */
+  get headStartGold(): number {
+    const l = this.state.pearlUpgrades.headStart;
+    return l > 0 ? 500 * Math.pow(10, l) : 0;
+  }
+
+  /**
+   * Start over from level 1 for pearls. Keeps: pearls & pearl upgrades,
+   * rubies, trophies, atlas, lifetime stats, missions, daily streak, boosts.
+   */
+  startVoyage(): number {
+    if (!this.canStartVoyage()) return 0;
+    const s = this.state;
+    const pearls = this.pearlsForVoyage;
+    s.pearls += pearls;
+    s.pearlsEarned += pearls;
+    s.voyages++;
+    s.bestLevel = Math.max(s.bestLevel, s.level);
+    s.level = 1;
+    s.unlockedZone = 1;
+    s.activeZone = 1;
+    s.zoneCatches = {};
+    s.bossesDefeated = [false, false];
+    s.upgrades = { skill: 0, speed: 0, autoGear: 0, radar: 0 };
+    s.fishermen = s.fishermen.map(() => 0);
+    s.gold = this.headStartGold;
+    s.runGold = 0;
+    this.emit({ type: 'voyage', pearls });
+    return pearls;
+  }
+
+  pearlUpgradeCost(id: PearlUpgradeId): number {
+    const def = PEARL_UPGRADES[id];
+    return Math.ceil(def.baseCost * Math.pow(def.costGrowth, this.state.pearlUpgrades[id]));
+  }
+
+  buyPearlUpgrade(id: PearlUpgradeId): boolean {
+    const s = this.state;
+    if (s.pearlUpgrades[id] >= PEARL_UPGRADES[id].maxLevel) return false;
+    const cost = this.pearlUpgradeCost(id);
+    if (s.pearls < cost) return false;
+    s.pearls -= cost;
+    s.pearlUpgrades[id]++;
+    this.emit({ type: 'purchase' });
+    return true;
   }
 
   get goldfishMult(): number {
@@ -153,12 +246,13 @@ export class Game {
 
   get incomePerSecond(): number {
     const s = this.state;
-    return fleetIncomePerSecond(s.level, s.unlockedZone, s.fishermen, this.incomeMult);
+    return fleetIncomePerSecond(s.level, s.unlockedZone, s.fishermen, this.incomeMult * Math.pow(1.25, s.pearlUpgrades.biggerNets));
   }
 
   addGold(amount: number): void {
     this.state.gold += amount;
     this.state.stats.totalGold += amount;
+    this.state.runGold += amount;
   }
 
   /** Advance idle production. */
@@ -177,7 +271,7 @@ export class Game {
   recordCatch(species: FishSpecies, zone: number): void {
     const s = this.state;
     const rarity = species.rarity as CatchableRarity;
-    const lucky = this.rnd() < LUCKY_CATCH_CHANCE;
+    const lucky = this.rnd() < this.luckyChance;
     const gold = fishGold(s.level, zone, rarity) * this.incomeMult * (lucky ? LUCKY_CATCH_MULT : 1);
     if (rarity !== 'common') s.stats.rareCaught++;
     const firstTime = !s.atlas[species.id];
@@ -261,7 +355,7 @@ export class Game {
   }
 
   canSailToNextLevel(): boolean {
-    return this.levelComplete && this.state.level < LEVEL_COUNT && this.state.gold >= this.nextLevelPrice;
+    return this.levelComplete && this.nextLevelPrice < MAX_PRICE && this.state.gold >= this.nextLevelPrice;
   }
 
   sailToNextLevel(): boolean {
@@ -269,6 +363,7 @@ export class Game {
     const s = this.state;
     s.gold -= this.nextLevelPrice;
     s.level++;
+    s.bestLevel = Math.max(s.bestLevel, s.level);
     s.unlockedZone = 1;
     s.activeZone = 1;
     s.zoneCatches = {};
@@ -319,7 +414,7 @@ export class Game {
   pendingOffline(now = Date.now()): { gold: number; seconds: number; countedSeconds: number } | null {
     const seconds = (now - this.state.lastSeen) / 1000;
     if (seconds < OFFLINE_MIN_SECONDS) return null;
-    const { gold, countedSeconds } = offlineEarnings(this.incomePerSecond, seconds);
+    const { gold, countedSeconds } = offlineEarnings(this.incomePerSecond, seconds, this.offlineCapHours);
     if (gold <= 0) return null;
     return { gold, seconds, countedSeconds };
   }

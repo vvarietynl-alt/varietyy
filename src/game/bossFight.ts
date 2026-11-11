@@ -37,9 +37,10 @@ export class BossFight {
   miniMisses = 0;
   private thresholdsDone = BOSS_MINIGAME_THRESHOLDS.map(() => false);
 
-  constructor(maxHp: number, private rnd: () => number = Math.random) {
+  constructor(maxHp: number, private rnd: () => number = Math.random, seconds = BOSS_FIGHT_SECONDS) {
     this.maxHp = maxHp;
     this.hp = maxHp;
+    this.timeLeft = seconds;
   }
 
   get hpFraction(): number {

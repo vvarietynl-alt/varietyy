@@ -1,4 +1,4 @@
-import { type BoostId, STARTING_RUBIES, type UpgradeId } from '../data/balance';
+import { type BoostId, type PearlUpgradeId, STARTING_RUBIES, type UpgradeId } from '../data/balance';
 import { FISHERMAN_COUNT } from './economy';
 
 export const SAVE_VERSION = 1;
@@ -60,6 +60,15 @@ export interface GameState {
   boosts: Record<BoostId, number>;
   missions: Mission[];
   daily: { lastClaimDay: string | null; streak: number };
+  /** Pearls available to spend in the pearl shop. */
+  pearls: number;
+  /** Every pearl ever earned; each gives a permanent income bonus. */
+  pearlsEarned: number;
+  pearlUpgrades: Record<PearlUpgradeId, number>;
+  /** Gold earned in the current voyage (decides the pearl reward). */
+  runGold: number;
+  voyages: number;
+  bestLevel: number;
 }
 
 export function newGame(now = Date.now()): GameState {
@@ -86,6 +95,12 @@ export function newGame(now = Date.now()): GameState {
     boosts: { doubleHaul: 0, strongArms: 0, goldenTide: 0 },
     missions: [],
     daily: { lastClaimDay: null, streak: 0 },
+    pearls: 0,
+    pearlsEarned: 0,
+    pearlUpgrades: { masterAngler: 0, biggerNets: 0, headStart: 0, longBreath: 0, luckyCharm: 0, deepPockets: 0, pearlDiver: 0 },
+    runGold: 0,
+    voyages: 0,
+    bestLevel: 1,
   };
 }
 
@@ -104,6 +119,7 @@ export function loadState(raw: string | null, now = Date.now()): GameState {
       boosts: { ...fresh.boosts, ...(data.boosts ?? {}) },
       missions: Array.isArray(data.missions) ? data.missions : [],
       daily: { ...fresh.daily, ...(data.daily ?? {}) },
+      pearlUpgrades: { ...fresh.pearlUpgrades, ...(data.pearlUpgrades ?? {}) },
       atlas: { ...(data.atlas ?? {}) },
       zoneCatches: { ...(data.zoneCatches ?? {}) },
       version: SAVE_VERSION,
@@ -111,6 +127,8 @@ export function loadState(raw: string | null, now = Date.now()): GameState {
     const f = Array.isArray(data.fishermen) ? data.fishermen : [];
     s.fishermen = fresh.fishermen.map((_, i) => (Number.isFinite(f[i]) ? f[i] : 0));
     if (!Number.isFinite(s.gold) || s.gold < 0) s.gold = 0;
+    if (data.runGold === undefined) s.runGold = s.stats.totalGold;
+    if (data.bestLevel === undefined) s.bestLevel = s.level;
     return s;
   } catch {
     return fresh;

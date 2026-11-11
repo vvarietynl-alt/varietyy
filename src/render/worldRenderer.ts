@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CatchableRarity } from '../data/balance';
-import { LEVEL_THEMES, type FishSpecies } from '../data/fish';
+import { themeFor, type FishSpecies } from '../data/fish';
 import { type FishEntity, type FishingWorld, ISLAND_RADIUS, ZONE_WIDTH, zoneBand } from '../game/fishing';
 import type { Game } from '../game/game';
 import type { Fleet } from '../game/fleet';
@@ -209,7 +209,7 @@ export class WorldRenderer {
     const level = this.game.state.level;
     if (level === this.themeLevel) return;
     this.themeLevel = level;
-    const theme = LEVEL_THEMES[level - 1];
+    const theme = themeFor(level);
     const u = this.ocean.material.uniforms;
     (u.uShallow.value as THREE.Color).setHex(theme.shallow);
     (u.uDeep.value as THREE.Color).setHex(theme.deep);
@@ -267,7 +267,7 @@ export class WorldRenderer {
   }
 
   private syncFish(dt: number): void {
-    const theme = LEVEL_THEMES[this.game.state.level - 1];
+    const theme = themeFor(this.game.state.level);
     const alive = new Set<number>();
     for (const f of this.world.fish) {
       alive.add(f.id);
@@ -388,7 +388,7 @@ export class WorldRenderer {
       this.bossMesh = null;
       this.bossKey = key;
       if (boss) {
-        const theme = LEVEL_THEMES[this.game.state.level - 1];
+        const theme = themeFor(this.game.state.level);
         this.bossMesh = createFish(boss.species.color, boss.species.shape, theme.decor, boss.species.shape === 'whale' ? 2.6 : 2.2);
         this.scene.add(this.bossMesh);
       }
@@ -522,7 +522,7 @@ export class WorldRenderer {
   renderPreview(species: FishSpecies): string {
     const cached = WorldRenderer.previewCache.get(species.id);
     if (cached) return cached;
-    const theme = LEVEL_THEMES[species.level - 1];
+    const theme = themeFor(species.level);
     const scene = new THREE.Scene();
     scene.add(new THREE.HemisphereLight(0xffffff, 0x446688, 2));
     const dl = new THREE.DirectionalLight(0xffffff, 1.5);

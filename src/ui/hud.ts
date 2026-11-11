@@ -1,6 +1,6 @@
-import { BOOSTS, type BoostId, isBossZone, LEVEL_COUNT, OFFLINE_TRIPLE_RUBY_COST, ZONES_PER_LEVEL } from '../data/balance';
+import { BOOSTS, type BoostId, isBossZone, OFFLINE_TRIPLE_RUBY_COST, PRESTIGE_MIN_LEVEL, ZONES_PER_LEVEL } from '../data/balance';
 import { canClaimDaily, claimableMissions } from '../game/missions';
-import { bossSpecies, LEVEL_THEMES } from '../data/fish';
+import { bossSpecies, themeFor } from '../data/fish';
 import { fishermanCost, upgradeCost, zoneUnlockPrice } from '../game/economy';
 import type { FishingWorld } from '../game/fishing';
 import { formatDuration, formatNumber } from '../game/format';
@@ -20,6 +20,9 @@ export class Hud {
   private goldEl = h('span');
   private rateEl = h('div', { class: 'rate' });
   private rubyEl = h('span');
+  private pearlEl = h('span');
+  private pearlPill: HTMLElement;
+  private voyageBtn: HTMLElement | null = null;
   private levelEl = h('span', { class: 'pill' });
   private zoneLabel = h('b');
   private zoneSub = h('small');
@@ -36,7 +39,7 @@ export class Hud {
   private modal: HTMLElement | null = null;
   private boostChips = h('div', { class: 'boost-chips' });
   private boostKey = '';
-  private sideBadges: { missions: HTMLElement; daily: HTMLElement; boosts: HTMLElement };
+  private sideBadges: { missions: HTMLElement; daily: HTMLElement; boosts: HTMLElement; voyage: HTMLElement };
   private combo = h('div', { class: 'combo', style: 'display:none' });
   private comboFill = h('div', { class: 'cfill' });
   private comboLabel = h('div', { class: 'clabel' });
@@ -47,6 +50,7 @@ export class Hud {
       h('div', { class: 'hud-left' }, this.levelEl, this.boostChips),
       h('div', { class: 'gold-box' }, h('div', { class: 'amount' }, coin(), this.goldEl), this.rateEl),
       h('div', { class: 'hud-right' },
+        (this.pearlPill = pressButton({ class: 'pill', style: 'display:none' }, () => this.openPanel('lighthouse'), '🐚', this.pearlEl)),
         pressButton({ class: 'pill' }, () => this.openPanel('shop'), ruby(), this.rubyEl),
         pressButton({ class: 'icon-btn', 'aria-label': 'Settings' }, () => this.openPanel('settings'), '⚙️'),
       ),
@@ -76,12 +80,16 @@ export class Hud {
       dock.append(btn);
     }
     const side = h('div', { class: 'side' });
-    const sideBtn = (id: 'missions' | 'daily' | 'boosts', icon: string, label: string) => {
+    const sideBtn = (id: 'missions' | 'daily' | 'boosts' | 'lighthouse', icon: string, label: string) => {
       const badge = h('i', { class: 'badge', style: 'display:none' });
-      side.append(pressButton({ class: 'side-btn', 'aria-label': label }, () => { host.sfx('click'); this.openPanel(id); }, icon, h('span', null, label), badge));
-      return badge;
+      const btn = pressButton({ class: 'side-btn', 'aria-label': label }, () => { host.sfx('click'); this.openPanel(id); }, icon, h('span', null, label), badge);
+      side.append(btn);
+      return { badge, btn };
     };
-    this.sideBadges = { missions: sideBtn('missions', '📜', 'Missions'), daily: sideBtn('daily', '🎁', 'Daily'), boosts: sideBtn('boosts', '⚡', 'Boost') };
+    this.sideBadges = { missions: sideBtn('missions', '📜', 'Missions').badge, daily: sideBtn('daily', '🎁', 'Daily').badge, boosts: sideBtn('boosts', '⚡', 'Boost').badge, voyage: h('i') };
+    const v = sideBtn('lighthouse', '🗼', 'Voyage');
+    this.sideBadges.voyage = v.badge;
+    this.voyageBtn = v.btn;
     this.combo.append(h('div', { class: 'ctrack' }, this.comboFill), this.comboLabel);
     ui.append(hud, this.zonebar, this.nextZone, side, this.combo, this.toasts, dock);
   }
@@ -96,6 +104,14 @@ export class Hud {
     const claim = claimableMissions(g);
     show(this.sideBadges.missions, claim > 0 ? String(claim) : '');
     show(this.sideBadges.daily, canClaimDaily(g) ? '!' : '');
+    const st = g.state;
+    const voyageOpen = st.level >= PRESTIGE_MIN_LEVEL || st.pearlsEarned > 0;
+    if (this.voyageBtn) this.voyageBtn.style.display = voyageOpen ? '' : 'none';
+    // badge when a voyage would at least double your pearls (or give the first ones)
+    const gain = g.pearlsForVoyage;
+    show(this.sideBadges.voyage, g.canStartVoyage() && gain >= Math.max(10, st.pearlsEarned) ? '!' : '');
+    this.pearlPill.style.display = st.pearlsEarned > 0 ? '' : 'none';
+    setText(this.pearlEl, formatNumber(st.pearls));
     const active = (Object.keys(BOOSTS) as BoostId[]).filter((id) => g.isBoostActive(id));
     show(this.sideBadges.boosts, active.length ? String(active.length) : '');
 
@@ -136,7 +152,7 @@ export class Hud {
     const rate = this.game.incomePerSecond;
     setText(this.rateEl, `+${formatNumber(rate)} /s`);
     setText(this.rubyEl, String(s.rubies));
-    setText(this.levelEl, `Lv ${s.level} · ${LEVEL_THEMES[s.level - 1].name}`);
+    setText(this.levelEl, `Lv ${s.level} · ${themeFor(s.level).name}`);
 
     const z = s.activeZone;
     setText(this.zoneLabel, `Zone ${z} / ${ZONES_PER_LEVEL}`);
@@ -162,7 +178,7 @@ export class Hud {
     let key: string = st.kind;
     let content: () => HTMLElement;
     if (st.kind === 'maxed') {
-      if (g.levelComplete && s.level < LEVEL_COUNT) {
+      if (g.levelComplete) {
         const can = g.canSailToNextLevel();
         key += can ? '-sail' : '-save';
         content = () => can
@@ -191,6 +207,7 @@ export class Hud {
       content = () => pressButton({ class: 'btn gold pulse' }, () => this.host.sfx(this.game.unlockNextZone() ? 'buy' : 'error'),
         isBossZone(next) ? `🐋 Open boss zone ${next}` : h('span', null, `Unlock zone ${next} · `, coin(), ' ', formatNumber(zoneUnlockPrice(s.level, next))));
     }
+    key = `${s.level}-${s.unlockedZone}-${key}`;
     if (key !== this.nextZoneKey) {
       this.nextZoneKey = key;
       this.nextZone.replaceChildren(content());
@@ -297,8 +314,21 @@ export class Hud {
     this.showModal((close) => [
       h('div', { class: 'emoji' }, '🏆'),
       h('h2', null, `Level ${level} conquered!`),
-      h('p', null, level < LEVEL_COUNT ? `Both bosses are defeated. Save up and sail to ${LEVEL_THEMES[level].name} from the Research Center.` : 'You defeated every boss in every sea. Legendary!'),
+      h('p', null, `Both bosses are defeated. Save up and sail to ${themeFor(level + 1).name} from the Research Center.${level >= PRESTIGE_MIN_LEVEL ? ' Or start a New Voyage at the Lighthouse for pearls!' : ''}`),
       h('div', { class: 'actions' }, pressButton({ class: 'btn gold wide' }, () => { close(); }, 'Great!')),
+    ]);
+  }
+
+  confirmVoyage(pearls: number, bonusAfter: number, onConfirm: () => void): void {
+    this.showModal((close) => [
+      h('div', { class: 'emoji' }, '⛵'),
+      h('h2', null, 'Start a New Voyage?'),
+      h('p', null, `You go back to level 1 with no gold, fishermen or upgrades. You get ${formatNumber(pearls)} pearls: gold from all fish becomes ×${formatNumber(bonusAfter)} forever.`),
+      h('div', { class: 'big' }, '🐚 +', formatNumber(pearls)),
+      h('div', { class: 'actions' },
+        pressButton({ class: 'btn gold wide' }, () => { close(); onConfirm(); }, 'Set sail!'),
+        pressButton({ class: 'btn wide' }, close, 'Not yet'),
+      ),
     ]);
   }
 

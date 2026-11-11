@@ -2,7 +2,6 @@ import {
   catchesToUnlockNext,
   FISHERMAN_NAMES,
   isBossZone,
-  LEVEL_COUNT,
   OFFLINE_CAP_HOURS,
   SPAWN_CHANCE,
   UPGRADES,
@@ -12,8 +11,11 @@ import {
   BOOSTS,
   type BoostId,
   DAILY_REWARDS,
+  PEARL_INCOME_BONUS,
+  PEARL_UPGRADES,
+  PRESTIGE_MIN_LEVEL,
 } from '../data/balance';
-import { ALL_SPECIES, bossSpecies, LEVEL_THEMES, type FishSpecies } from '../data/fish';
+import { ALL_SPECIES, bossSpecies, themeFor, type FishSpecies } from '../data/fish';
 import {
   autoDps,
   bestFishingZone,
@@ -45,6 +47,7 @@ export interface PanelHost {
   reward(text: string): void;
   onClose(): void;
   confirmReset(): void;
+  confirmVoyage(): void;
 }
 
 interface PanelDef {
@@ -78,7 +81,7 @@ export class PanelManager {
   open(id: PanelId): void {
     this.close(false);
     this.current = id;
-    if (id === 'atlas') this.atlasLevel = this.host.game.state.level;
+    if (id === 'atlas') this.atlasLevel = Math.min(10, this.host.game.state.level);
     const def = this.defs[id];
     const body = h('div', { class: 'body' });
     const title = h('h2', null, def.title(), def.subtitle ? h('small', null, def.subtitle()) : null);
@@ -157,7 +160,7 @@ export class PanelManager {
       researchCenter: {
         icon: '🔬',
         title: () => 'Research Center',
-        subtitle: () => `Level ${s().level} · ${LEVEL_THEMES[s().level - 1].name}`,
+        subtitle: () => `Level ${s().level} · ${themeFor(s().level).name}`,
         key: () => `${s().level}-${s().unlockedZone}-${s().bossesDefeated.join()}`,
         build: (body) => {
           const ups: Updater[] = [];
@@ -210,20 +213,16 @@ export class PanelManager {
             }
             body.append(row);
           }
-          if (st.level < LEVEL_COUNT) {
-            const next = LEVEL_THEMES[st.level];
-            const price = h('span');
-            const btn = pressButton({ class: 'btn gold wide' }, buy(() => game.sailToNextLevel()), `Sail to Level ${st.level + 1} · `, coin(), price);
-            const note = h('div', { class: 'note' });
-            ups.push(() => {
-              setText(price, formatNumber(game.nextLevelPrice));
-              setDisabled(btn, !game.canSailToNextLevel());
-              setText(note, game.levelComplete ? `Next: ${next.name}. Fish there are worth much more!` : 'Defeat both bosses of this level to sail on.');
-            });
-            body.append(h('div', { style: 'margin-top:10px' }, btn), note);
-          } else {
-            body.append(h('div', { class: 'note' }, game.levelComplete ? '🏆 You conquered every sea!' : 'This is the last sea. Defeat both bosses!'));
-          }
+          const next = themeFor(st.level + 1);
+          const price = h('span');
+          const btn = pressButton({ class: 'btn gold wide' }, buy(() => game.sailToNextLevel()), `Sail to Level ${st.level + 1} · `, coin(), price);
+          const note = h('div', { class: 'note' });
+          ups.push(() => {
+            setText(price, formatNumber(game.nextLevelPrice));
+            setDisabled(btn, !game.canSailToNextLevel());
+            setText(note, game.levelComplete ? `Next: ${next.name}. Fish there are worth much more!` : 'Defeat both bosses of this level to sail on.');
+          });
+          body.append(h('div', { style: 'margin-top:10px' }, btn), note);
           return ups;
         },
       },
@@ -346,10 +345,55 @@ export class PanelManager {
       lighthouse: {
         icon: '🗼',
         title: () => 'Lighthouse',
-        subtitle: () => 'Light the way to new seas',
+        subtitle: () => `New Voyage · voyages made: ${s().voyages}`,
+        key: () => `${s().voyages}`,
         build: (body) => {
-          body.append(h('p', { class: 'note' }, 'The lighthouse will reveal hidden areas of each sea. Coming in a next update.'));
-          return [];
+          const ups: Updater[] = [];
+          const have = h('b');
+          const bonus = h('b');
+          const gain = h('b');
+          const best = h('b');
+          body.append(h('div', { class: 'summary' },
+            h('span', null, '🐚 Pearls ', have),
+            h('span', null, 'Income bonus ', bonus),
+            h('span', null, 'Best level ', best),
+          ));
+          const voyageBtn = pressButton({ class: 'btn gold wide' }, () => this.host.confirmVoyage(), '⛵ Start a New Voyage · +', gain, ' 🐚');
+          const voyageNote = h('p', { class: 'note' });
+          body.append(
+            h('div', { class: 'voyage-card' },
+              h('b', null, 'Start a New Voyage'),
+              h('small', null, `Sail back to level 1 with a fresh crew. You keep pearls, rubies, the Atlas and your pearl upgrades. Every pearl ever earned gives +${PEARL_INCOME_BONUS * 100}% gold forever, so each voyage goes faster and further.`),
+              voyageBtn,
+              voyageNote,
+            ),
+            h('h3', { class: 'section-title' }, 'Pearl upgrades (permanent)'),
+          );
+          ups.push(() => {
+            const st = s();
+            setText(have, formatNumber(st.pearls));
+            setText(bonus, `×${formatNumber(game.pearlBonus)}`);
+            setText(best, String(Math.max(st.bestLevel, st.level)));
+            setText(gain, formatNumber(game.pearlsForVoyage));
+            setDisabled(voyageBtn, !game.canStartVoyage());
+            setText(voyageNote, st.level < PRESTIGE_MIN_LEVEL
+              ? `Reach level ${PRESTIGE_MIN_LEVEL} to start a voyage.`
+              : `The further you sail (level and zone), the more pearls you get. Tip: sail on until progress gets slow, then start over.`);
+          });
+          for (const def of Object.values(PEARL_UPGRADES)) {
+            const lvl = h('span', { class: 'lvl' });
+            const price = h('span');
+            const btn = pressButton({ class: 'btn small pearl' }, () => this.host.sfx(game.buyPearlUpgrade(def.id) ? 'buy' : 'error'), '🐚 ', price);
+            body.append(h('div', { class: 'row' }, h('div', { class: 'ico' }, def.icon), h('div', { class: 'info' }, h('b', null, def.name, ' ', lvl), h('small', null, def.description)), btn));
+            ups.push(() => {
+              const l = s().pearlUpgrades[def.id];
+              const maxed = l >= def.maxLevel;
+              setText(lvl, `Lv ${l}/${def.maxLevel}`);
+              setText(price, maxed ? 'MAX' : formatNumber(game.pearlUpgradeCost(def.id)));
+              setDisabled(btn, maxed || s().pearls < game.pearlUpgradeCost(def.id));
+            });
+          }
+          return ups;
         },
       },
 
@@ -361,13 +405,14 @@ export class PanelManager {
         build: (body) => {
           const st = s();
           const seg = h('div', { class: 'seg' });
-          for (let l = 1; l <= st.level; l++) {
+          const maxTab = Math.min(10, Math.max(st.level, st.bestLevel));
+          for (let l = 1; l <= maxTab; l++) {
             seg.append(pressButton({ class: this.atlasLevel === l ? 'on' : '' }, () => { this.atlasLevel = l; this.rebuild(); }, String(l)));
           }
-          if (st.level > 1) body.append(seg);
+          if (maxTab > 1) body.append(seg);
           const species = ALL_SPECIES.filter((sp) => sp.level === this.atlasLevel);
           const caught = species.filter((sp) => st.atlas[sp.id]).length;
-          body.append(h('div', { class: 'summary' }, h('span', null, LEVEL_THEMES[this.atlasLevel - 1].name), h('span', null, 'Discovered ', h('b', null, `${caught}/${species.length}`))));
+          body.append(h('div', { class: 'summary' }, h('span', null, themeFor(this.atlasLevel).name), h('span', null, 'Discovered ', h('b', null, `${caught}/${species.length}`))));
           const grid = h('div', { class: 'atlas-grid' });
           for (const sp of species) {
             const n = st.atlas[sp.id] ?? 0;

@@ -4,7 +4,7 @@ import '@fontsource/baloo-2/800.css';
 import { Audio, vibrate } from './audio';
 import { FishingWorld } from './game/fishing';
 import { BOAT_CLASS_NAMES, boatClassFor, Fleet } from './game/fleet';
-import { BOOSTS, FISHERMAN_NAMES } from './data/balance';
+import { BOOSTS, FISHERMAN_NAMES, PEARL_INCOME_BONUS } from './data/balance';
 import { canClaimDaily, ensureMissions } from './game/missions';
 import { formatNumber } from './game/format';
 import { Game } from './game/game';
@@ -53,6 +53,21 @@ const panels = new PanelManager(uiRoot, {
   sfx,
   reward: (text) => overlay.rewardPop(text),
   onClose: () => {},
+  confirmVoyage: () => {
+    const pearls = game.pearlsForVoyage;
+    const after = 1 + (game.state.pearlsEarned + pearls) * PEARL_INCOME_BONUS;
+    hud.confirmVoyage(pearls, after, () => {
+      if (!game.startVoyage()) return;
+      world.abandonFight();
+      fleet.reset();
+      renderer.fleetRenderer.reset();
+      panels.close();
+      renderer.mode = 'sea';
+      world.syncZone(true);
+      renderer.applyTheme();
+      save();
+    });
+  },
   confirmReset: () => hud.confirmReset(() => {
     try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
     game.state = newGame();
@@ -107,6 +122,11 @@ game.on((e) => {
       hud.toast([`🐋 ${e.species.name} caught! +`, coin(), formatNumber(e.gold)], true);
       if (e.levelComplete) setTimeout(() => hud.showLevelComplete(game.state.level), 1200);
       save();
+      break;
+    case 'voyage':
+      sfx('win');
+      overlay.rewardPop(`⛵ New Voyage! +${formatNumber(e.pearls)} 🐚`);
+      hud.toast([`🐚 Gold from fish is now ×${formatNumber(game.pearlBonus)}`], true);
       break;
     case 'boost':
       hud.toast([`⚡ ${BOOSTS[e.boost].name} +${e.minutes} min`], true);

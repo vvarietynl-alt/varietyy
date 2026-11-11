@@ -138,18 +138,33 @@ function buildSpecies(): FishSpecies[] {
 }
 
 export const ALL_SPECIES: FishSpecies[] = buildSpecies();
+
+/** Hand-made level whose fish and look an (endless) level uses. */
+export function baseLevel(level: number): number {
+  return ((level - 1) % LEVEL_COUNT) + 1;
+}
+
+const ROMAN = ['', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+/** Theme of any level; after level 10 the seas come back as "II", "III" … */
+export function themeFor(level: number): LevelTheme {
+  const base = LEVEL_THEMES[baseLevel(level) - 1];
+  const cycle = Math.floor((level - 1) / LEVEL_COUNT);
+  if (cycle === 0) return base;
+  return { ...base, name: `${base.name} ${ROMAN[cycle] ?? cycle + 1}` };
+}
 export const SPECIES_BY_ID: Map<string, FishSpecies> = new Map(ALL_SPECIES.map((s) => [s.id, s]));
 
 export function speciesFor(level: number, rarity: Rarity): FishSpecies[] {
-  return ALL_SPECIES.filter((s) => s.level === level && s.rarity === rarity);
+  const l = baseLevel(level);
+  return ALL_SPECIES.filter((s) => s.level === l && s.rarity === rarity);
 }
 
 export function bossSpecies(level: number, bossIndex: number): FishSpecies {
-  const s = SPECIES_BY_ID.get(`L${level}-mythical-${bossIndex}`);
+  const s = SPECIES_BY_ID.get(`L${baseLevel(level)}-mythical-${bossIndex}`);
   if (!s) throw new Error(`no boss ${level}/${bossIndex}`);
   return s;
 }
 
 export function goldfishSpecies(level: number): FishSpecies {
-  return SPECIES_BY_ID.get(`L${level}-goldfish-0`)!;
+  return SPECIES_BY_ID.get(`L${baseLevel(level)}-goldfish-0`)!;
 }

@@ -2,7 +2,6 @@ import {
   type CatchableRarity,
   COMBO_FOR_FRENZY,
   COMBO_WINDOW,
-  CRIT_CHANCE,
   CRIT_MULT,
   FRENZY_DAMAGE_MULT,
   FRENZY_GOLDFISH_MULT,
@@ -262,7 +261,7 @@ export class FishingWorld {
     const t = this.target;
     if (!t || t.state !== 'hooked') return 'none';
     this.bumpCombo();
-    const crit = this.rnd() < CRIT_CHANCE;
+    const crit = this.rnd() < this.game.critChance;
     const dmg = tapDamage(this.game.state.upgrades) * this.game.tapDamageMult * (this.frenzy > 0 ? FRENZY_DAMAGE_MULT : 1) * (crit ? CRIT_MULT : 1);
     t.hp -= dmg;
     this.emit({ type: 'hit', x: t.x, z: t.z, damage: dmg, crit });
@@ -277,7 +276,7 @@ export class FishingWorld {
       this.emit({ type: 'boss-mini-hit', hit });
       return 'mini';
     }
-    const crit = this.rnd() < CRIT_CHANCE;
+    const crit = this.rnd() < this.game.critChance;
     const dmg = tapDamage(this.game.state.upgrades) * this.game.tapDamageMult * (crit ? CRIT_MULT : 1);
     fight.tap(dmg);
     if (this.boss) this.emit({ type: 'hit', x: this.boss.x, z: this.boss.z, damage: dmg, crit });
@@ -470,7 +469,7 @@ export class FishingWorld {
       if (d > BOSS_RANGE) this.moveBoat(boss.x, boss.z, dt, BOSS_RANGE * 0.7);
       else if (this.bossCooldown <= 0) {
         this.boat.moving = false;
-        this.fight = new BossFight(bossHp(this.game.state.level, boss.bossIndex), this.rnd);
+        this.fight = new BossFight(bossHp(this.game.state.level, boss.bossIndex), this.rnd, this.game.bossSeconds);
         this.emit({ type: 'boss-start', boss, fight: this.fight });
       }
       return;

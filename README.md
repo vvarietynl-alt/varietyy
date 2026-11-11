@@ -70,6 +70,16 @@ Na een aanpassing: `npm run sim` om het effect op de speeltijd te zien.
 Resultaat van de simulatie (constant actief spelen, slimme aankopen): level 1 ≈ 30 min, oplopend tot ≈ 3,5 uur voor level 10,
 ≈ 15 uur actief spelen in totaal. Met offline inkomsten erbij speelt een gemiddelde speler weken. De vloot levert 40–55% van het inkomen.
 
+## Eindeloos spelen
+
+- **Na level 10 gaat het door**: de zeeën komen terug als zwaardere versies ("Sunny Shallows II", "III" …) met waardevollere vis
+  en sterkere bosses. Vissers blijven elke 100 extra inhuringen ×2 produceren.
+- **Nieuwe Reis (prestige)** bij de vuurtoren, vanaf level 3: terug naar level 1 voor **parels**. Elke ooit verdiende parel geeft
+  permanent +2% goud. Hoe verder je komt (level + zone), hoe meer parels.
+- **Parelwinkel**: Master Angler, Bigger Nets, Head Start, Long Breath, Lucky Charm, Deep Pockets, Pearl Diver.
+- Simulatie: `npm run sim -- --voyages 14` — elke reis komt ±10 levels verder dan de vorige, reizen duren geleidelijk langer
+  (3 → 20 uur actief). De getallen blijven tot ongeveer level 200 binnen wat JavaScript aankan; daarboven stopt de game veilig.
+
 ## Projectstructuur
 
 ```
