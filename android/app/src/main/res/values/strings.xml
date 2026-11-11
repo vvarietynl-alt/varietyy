@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Whale Hunter</string>
+    <string name="title_activity_main">Whale Hunter</string>
+    <string name="package_name">nl.variety.whalehunter</string>
+    <string name="custom_url_scheme">nl.variety.whalehunter</string>
+</resources>
